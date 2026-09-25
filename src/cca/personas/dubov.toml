@@ -1,0 +1,12 @@
+# "Dubov-like": creative, provocative, high variance. Strong chaos gains.
+# Inspired by Daniil Dubov's public reputation; NOT fitted to his games.
+name = "dubov"
+w0 = 0.60
+g_w = 1.2
+lam0 = 0.03
+g_lam = 1.0
+h0 = 0.006
+g_h = 1.0
+eps0 = 0.05
+g_eps = 0.8
+eps_max = 0.16

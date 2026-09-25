@@ -1,0 +1,76 @@
+cff-version: 1.2.0
+message: "If you use CCA, please cite it as below, together with the works it builds on (docs/science.md)."
+type: software
+title: "CCA — Chaotic-Chess-Algorithm (C-AIME decision core)"
+abstract: >-
+  A research layer over Stockfish and Maia-2 that plays human-like, hard-to-predict,
+  opponent-aware chess: closed-form piKL anchored on a human move model, human-aware
+  look-ahead with safe exploitation, latent affect dynamics and a reproducible
+  Lorenz-63 temperament driver.
+authors:
+  - family-names: "Nguyễn"
+    given-names: "Vũ Đông Quân"
+    alias: "DonQuaan"
+version: "0.1.0"
+date-released: "2026-09-25"
+license: Apache-2.0
+repository-code: "https://github.com/DonQuaan/CCA"
+keywords:
+  - chess
+  - human-like AI
+  - behavioral game theory
+  - KL-regularized search
+  - quantal response
+  - deterministic chaos
+references:
+  - type: conference-paper
+    title: "Maia-2: A Unified Model for Human-AI Alignment in Chess"
+    authors:
+      - family-names: Tang
+        given-names: Zhenwei
+      - family-names: Jiao
+        given-names: Difan
+      - family-names: McIlroy-Young
+        given-names: Reid
+      - family-names: Kleinberg
+        given-names: Jon
+      - family-names: Sen
+        given-names: Siddhartha
+      - family-names: Anderson
+        given-names: Ashton
+    year: 2024
+    collection-title: "Advances in Neural Information Processing Systems 37"
+    identifiers:
+      - type: other
+        value: "arXiv:2409.20553"
+  - type: conference-paper
+    title: "Modeling Strong and Human-Like Gameplay with KL-Regularized Search"
+    authors:
+      - family-names: Jacob
+        given-names: Athul Paul
+      - family-names: Wu
+        given-names: David J.
+      - family-names: Farina
+        given-names: Gabriele
+      - family-names: Lerer
+        given-names: Adam
+      - family-names: Hu
+        given-names: Hengyuan
+      - family-names: Bakhtin
+        given-names: Anton
+      - family-names: Andreas
+        given-names: Jacob
+      - family-names: Brown
+        given-names: Noam
+    year: 2022
+    collection-title: "Proceedings of the 39th International Conference on Machine Learning (PMLR 162)"
+    identifiers:
+      - type: other
+        value: "arXiv:2112.07544"
+  - type: software
+    title: "Stockfish"
+    authors:
+      - name: "The Stockfish developers"
+    version: "19"
+    url: "https://github.com/official-stockfish/Stockfish"
+    license: GPL-3.0-or-later

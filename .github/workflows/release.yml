@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --frozen
+      - name: Tag must equal package version and have a CHANGELOG entry
+        run: uv run python scripts/check_release.py "${GITHUB_REF_NAME}"
+      - run: uv run pytest -m "not engine and not maia2"
+      - run: uv build
+      - name: Extract release notes
+        run: uv run python scripts/check_release.py "${GITHUB_REF_NAME}" --notes > RELEASE_NOTES.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
+          files: dist/*
+          prerelease: ${{ contains(github.ref_name, 'a') || contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') }}

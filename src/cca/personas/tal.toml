@@ -1,0 +1,11 @@
+# "Tal-like": attacking, speculative, plays for the opponent's practical problems.
+# Inspired by Mikhail Tal's public reputation; NOT fitted to his games.
+name = "tal"
+w0 = 0.70        # base exploitation weight (human-aware value vs engine truth)
+g_w = 1.0
+lam0 = 0.02      # less human anchoring, but the utility is exploitation-weighted
+g_lam = 0.7
+h0 = 0.008       # likes positions where the opponent has many plausible options
+eps0 = 0.07      # accepts larger objective sacrifices...
+eps_max = 0.20   # ...but never more than 0.20 expected score below the engine's best
+l_eps = 1.5

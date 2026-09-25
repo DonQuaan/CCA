@@ -1,0 +1,133 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cca-chess"
+dynamic = ["version"]
+description = "CCA (Chaotic-Chess-Algorithm): a research layer over Stockfish + Maia-2 that plays human-like, hard-to-predict, opponent-aware chess (C-AIME core)."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Nguyễn Vũ Đông Quân (DonQuaan)" }]
+requires-python = ">=3.11"
+keywords = ["chess", "stockfish", "maia", "human-like-ai", "behavioral-game-theory", "pikl", "quantal-response", "chaos"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Games/Entertainment :: Board Games",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
+# Core math (chaos / neuro / policy / timing) is dependency-free on purpose.
+# python-chess is GPL-3.0: only the engine/UCI adapter layer imports it (see THIRD_PARTY_NOTICES.md).
+dependencies = ["chess>=1.11"]
+
+[project.optional-dependencies]
+# Maia-2 human-move model (MIT). maia2 0.11 supports Python 3.10-3.12 only and pins torch 2.8;
+# the PyPI torch wheel for Windows is CPU-only -> install the CUDA wheel first (see README).
+maia2 = ["maia2>=0.11,<0.12; python_version < '3.13'"]
+
+[project.scripts]
+cca = "cca.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/DonQuaan/CCA"
+Issues = "https://github.com/DonQuaan/CCA/issues"
+Changelog = "https://github.com/DonQuaan/CCA/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-cov>=6.0",
+  "hypothesis>=6.120",
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "pre-commit>=4.0",
+  "pip-audit>=2.7",
+]
+
+[tool.hatch.version]
+path = "src/cca/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cca"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/cca", "tests", "configs", "docs", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "CITATION.cff", "CHANGELOG.md", "README.md"]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF", "C4", "PT", "PL", "S", "ANN", "D", "PERF", "FURB", "TRY", "ERA",
+]
+ignore = [
+  "D105", "D107",        # magic/__init__ docstrings
+  "D203", "D213",        # conflicting docstring styles (we use D211 + D212)
+  "PLR0913",             # scientific functions legitimately take many params
+  "PLR2004",             # magic numbers are named in configs; tests use literals
+  "TRY003",
+  "RUF001", "RUF002", "RUF003",  # Vietnamese / Greek letters in docs are intentional
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Lazy imports are deliberate: optional heavy deps (torch/maia2) and a fast CLI start-up.
+"src/cca/cli.py" = ["PLC0415"]
+"src/cca/uci/protocol.py" = ["PLC0415"]
+"src/cca/engines/maia2_human.py" = ["PLC0415"]
+"tests/**" = ["S101", "D", "ANN", "PLR2004", "S311", "PLC0415", "S603"]
+"scripts/**" = ["T201", "D", "PLC0415"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+files = ["src/cca", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["maia2.*", "torch.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+markers = [
+  "engine: needs a real Stockfish binary (set CCA_STOCKFISH or run scripts/fetch_stockfish.py)",
+  "maia2: needs the maia2 extra + downloaded weights",
+  "slow: long-running numerical checks",
+]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["cca"]
+# Needs torch + Maia-2 weights (267 MB); exercised by `pytest -m maia2` on a machine that has them.
+omit = ["*/cca/engines/maia2_human.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 85
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "@overload"]

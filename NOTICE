@@ -1,0 +1,11 @@
+CCA (Chaotic-Chess-Algorithm)
+Copyright 2026 Nguyễn Vũ Đông Quân (DonQuaan)
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+If you redistribute CCA or a derivative work, you must keep this NOTICE file,
+credit the original author, and state that you changed the files you modified.
+
+CCA does not include the source code or binaries of any third-party engine or
+model. It communicates with Stockfish (GPL-3.0) as a separate UCI process and
+imports python-chess (GPL-3.0) and, optionally, Maia-2 (MIT). See
+THIRD_PARTY_NOTICES.md for what this means for redistributors.

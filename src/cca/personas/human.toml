@@ -1,0 +1,7 @@
+# Human mirror: strongly anchored on the human prior (Maia-2 at elo_self). Baseline persona.
+name = "human"
+lam0 = 0.5
+g_lam = 0.3
+w0 = 0.5
+eps0 = 0.10
+eps_max = 0.25

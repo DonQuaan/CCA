@@ -1,0 +1,10 @@
+# Solid / prophylactic: low risk, low chaos. A control persona for experiments.
+name = "solid"
+w0 = 0.30
+g_w = 0.2
+g_lam = 0.2
+h0 = 0.0
+eps0 = 0.015
+g_eps = 0.2
+eps_max = 0.05
+l_eps = 0.3

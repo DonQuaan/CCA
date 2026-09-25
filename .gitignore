@@ -1,0 +1,37 @@
+# Python / tooling
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Third-party binaries & weights are DOWNLOADED, never committed (GPL / size)
+engines/*
+!engines/stockfish.lock.json
+weights/
+*.pt
+*.pb.gz
+*.onnx
+
+# Experiment outputs
+runs/
+
+# Secrets
+.env
+.env.*
+.private/
+*.pem
+*.key
+
+# Internal agent doctrine (not part of the public project)
+CLAUDE.md
+.claude/
