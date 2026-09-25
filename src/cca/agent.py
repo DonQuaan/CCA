@@ -158,7 +158,6 @@ class CAIMEAgent:
             prior_anchor = temper(prior_full, cfg.opening_temperature)
             trace["opening_tempered"] = 1.0
         root_q = self._evaluate_candidates(board, root, prior_anchor)
-        cand_moves = list(root_q)
 
         own_pressure = time_pressure(
             clock.my_time,
@@ -178,16 +177,7 @@ class CAIMEAgent:
         knobs = self._regulate(knobs, clock, v_now, trace)
 
         # 5. Human-aware look-ahead (+ attention mask on the agent's own prior).
-        centroid = battle_centroid(self._history[-4:])
-        sigma = attention_radius(self.state.stress, threshold=cfg.persona.tau)
-        anchor = restrict(prior_anchor, cand_moves, floor=cfg.anchor_floor)
-        candidates: list[Candidate] = []
-        reply_dists: dict[str, tuple[str, dict[str, float]]] = {}
-        for uci in cand_moves:
-            cand, fen_after, dist = self._lookahead(board, root_q[uci], knobs.opp_temperature)
-            attn = move_attention(uci, centroid, sigma)
-            candidates.append(replace(cand, prior=anchor[uci], attention=attn))
-            reply_dists[uci] = (fen_after, dist)
+        candidates, reply_dists = self._human_lookahead(board, root_q, prior_anchor, knobs)
 
         # 6. Decide.
         safe, policy = self._decide(candidates, knobs)
@@ -343,23 +333,56 @@ class CAIMEAgent:
             mass += p
         return list(dict.fromkeys(moves))
 
-    def _lookahead(
-        self, board: chess.Board, root_eval: MoveEval, opp_temperature: float
-    ) -> tuple[Candidate, str, dict[str, float]]:
+    def _human_lookahead(
+        self,
+        board: chess.Board,
+        root_q: dict[str, MoveEval],
+        prior_anchor: dict[str, float],
+        knobs: Knobs,
+    ) -> tuple[list[Candidate], dict[str, tuple[str, dict[str, float]]]]:
+        """Candidates with human-aware statistics; opponent models are queried in one batch."""
         cfg = self.config
-        color = board.turn
-        after = board.copy(stack=False)
-        after.push_uci(root_eval.uci)
+        cand_moves = list(root_q)
+        centroid = battle_centroid(self._history[-4:])
+        sigma = attention_radius(self.state.stress, threshold=cfg.persona.tau)
+        anchor = restrict(prior_anchor, cand_moves, floor=cfg.anchor_floor)
+        # Keep the move stack: the engine must see repetitions in the child positions.
+        afters = {uci: board.copy() for uci in cand_moves}
+        for uci, child in afters.items():
+            child.push_uci(uci)
+        live = [u for u in cand_moves if not afters[u].is_game_over(claim_draw=False)]
+        batched = self.human.distributions([afters[u] for u in live], cfg.elo_oppo, cfg.elo_self)
+        opp_dists = dict(zip(live, batched, strict=True))
+        candidates: list[Candidate] = []
+        reply_dists: dict[str, tuple[str, dict[str, float]]] = {}
+        for uci in cand_moves:
+            cand, fen_after, dist = self._lookahead(
+                afters[uci], root_q[uci], knobs.opp_temperature, opp_dists.get(uci, {}), board.turn
+            )
+            attn = move_attention(uci, centroid, sigma)
+            candidates.append(replace(cand, prior=anchor[uci], attention=attn))
+            reply_dists[uci] = (fen_after, dist)
+        return candidates, reply_dists
+
+    def _lookahead(
+        self,
+        after: chess.Board,
+        root_eval: MoveEval,
+        opp_temperature: float,
+        dist: dict[str, float],
+        color: chess.Color,
+    ) -> tuple[Candidate, str, dict[str, float]]:
+        """Evaluate the opponent's likely human replies in the position after a candidate."""
+        cfg = self.config
         fen_after = after.fen()
         q_opt = root_eval.q
-        if after.is_game_over(claim_draw=False):
+        if after.is_game_over(claim_draw=False) or not dist:
             stats = reply_stats({}, {}, q_opt)
             return (
                 Candidate(root_eval.uci, q_opt, stats.q_human, 0.0, 0.0, 0.0),
                 fen_after,
                 {},
             )
-        dist = self.human.distribution(after, cfg.elo_oppo, cfg.elo_self)
         replies = [
             u for u, _ in sorted(dist.items(), key=lambda kv: (-kv[1], kv[0]))[: cfg.reply_top]
         ]
