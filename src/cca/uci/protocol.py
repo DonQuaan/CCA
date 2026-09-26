@@ -131,8 +131,8 @@ def _is_windows_pipe(stream: TextIO) -> bool:
     if sys.platform != "win32":
         return False
     try:
-        import _winapi  # type: ignore[import-not-found,unused-ignore]
-        import msvcrt
+        import _winapi  # type: ignore[import-not-found,unused-ignore]  # noqa: PLC0415 - Windows-only
+        import msvcrt  # noqa: PLC0415 - Windows-only
 
         handle = msvcrt.get_osfhandle(stream.fileno())
         return bool(_winapi.GetFileType(handle) == _winapi.FILE_TYPE_PIPE)
@@ -155,8 +155,8 @@ def _pipe_reader(stream: TextIO, put: Callable[[str | None], None]) -> None:
     torch + CUDA matmul/conv took 1.4 s with no reader, 1.4 s with this polling reader, and hung
     for > 90 s with a blocking reader. So: peek, and only read bytes that are already there.
     """
-    import _winapi  # type: ignore[import-not-found,unused-ignore]
-    import msvcrt
+    import _winapi  # type: ignore[import-not-found,unused-ignore]  # noqa: PLC0415 - Windows-only
+    import msvcrt  # noqa: PLC0415 - Windows-only
 
     fd = stream.fileno()
     handle = msvcrt.get_osfhandle(fd)
@@ -495,7 +495,7 @@ class UciServer:
 
     def _ensure_agent(self) -> CAIMEAgent:
         if self._agent is None:
-            from cca.engines.stockfish import StockfishEngine
+            from cca.engines.stockfish import StockfishEngine  # noqa: PLC0415 - lazy start-up
 
             engine = StockfishEngine(
                 self._opts["StockfishPath"] or None,
@@ -517,7 +517,7 @@ class UciServer:
             if self._maia is not None:
                 return self._maia
             try:
-                from cca.engines.maia2_human import Maia2HumanModel
+                from cca.engines.maia2_human import Maia2HumanModel  # noqa: PLC0415 - torch
 
                 self._maia = Maia2HumanModel(
                     model_type=self._opts["CCA_Maia2Type"], device=self._opts["CCA_Device"]
@@ -526,7 +526,7 @@ class UciServer:
                 self.send(f"info string maia2 unavailable ({exc}); falling back to QRE human model")
             else:
                 return self._maia
-        from cca.engines.qre_human import QREHumanModel
+        from cca.engines.qre_human import QREHumanModel  # noqa: PLC0415 - lazy start-up
 
         return QREHumanModel(engine)
 

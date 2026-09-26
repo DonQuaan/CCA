@@ -93,8 +93,8 @@ class Maia2HumanModel:
         batch_size: int = 64,
     ) -> None:
         try:
-            import torch
-            from maia2 import inference, model
+            import torch  # noqa: PLC0415 - optional extra, loaded only on use
+            from maia2 import inference, model  # noqa: PLC0415 - optional extra
         except ImportError as exc:  # pragma: no cover - exercised only without the extra
             raise ImportError(
                 "Maia-2 is not installed: use Python 3.10-3.12 and `uv sync --extra maia2`"

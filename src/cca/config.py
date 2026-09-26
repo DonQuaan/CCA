@@ -7,15 +7,18 @@ import math
 import tomllib
 from importlib import resources
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from cca.agent import AgentConfig
 from cca.chaos.lorenz import LorenzParams
 from cca.neuro.controller import Persona
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 from cca.neuro.neuromodulation import NeuroParams
 from cca.timing.think_time import ThinkTimeParams
 
-T = TypeVar("T")
+T = TypeVar("T", bound="DataclassInstance")
 
 _SECTIONS: dict[str, type[Any]] = {
     "persona": Persona,
@@ -30,7 +33,7 @@ class ConfigError(ValueError):
 
 
 def _build(cls: type[T], data: dict[str, Any], where: str) -> T:
-    names = {f.name: f for f in dataclasses.fields(cls)}  # type: ignore[arg-type]
+    names = {f.name: f for f in dataclasses.fields(cls)}
     unknown = sorted(set(data) - set(names))
     if unknown:
         raise ConfigError(f"{where}: unknown key(s) {unknown}")

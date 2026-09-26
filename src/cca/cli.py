@@ -9,7 +9,7 @@ import json
 import platform
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from cca import __version__
 
@@ -32,7 +32,7 @@ def _agent_config(args: argparse.Namespace) -> AgentConfig:
     from cca.config import load_agent_config, load_persona
 
     cfg = load_agent_config(args.config) if args.config else AgentConfig()
-    changes: dict[str, object] = {
+    changes: dict[str, Any] = {
         "elo_self": args.elo_self,
         "elo_oppo": args.elo_oppo,
         "seed": args.seed,
@@ -41,7 +41,7 @@ def _agent_config(args: argparse.Namespace) -> AgentConfig:
         changes["persona"] = load_persona(args.persona)
     if args.argmax:
         changes["sample"] = False
-    return dataclasses.replace(cfg, **changes)  # type: ignore[arg-type]
+    return dataclasses.replace(cfg, **changes)
 
 
 def _engine(args: argparse.Namespace, nodes: int | None = None) -> SearchEngine:
@@ -114,8 +114,8 @@ def _git(repo: Path, *args: str) -> str | None:
 
     try:
         # Argument list (no shell); args are literals from this module, repo a resolved path.
-        return subprocess.run(  # noqa: S603
-            ["git", "-C", str(repo), *args],  # noqa: S607
+        return subprocess.run(  # noqa: S603 - fixed argument list, no shell
+            ["git", "-C", str(repo), *args],  # noqa: S607 - git from PATH, like any VCS tool
             capture_output=True,
             text=True,
             encoding="utf-8",

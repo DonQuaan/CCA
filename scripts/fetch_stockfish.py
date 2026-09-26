@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import platform
@@ -52,7 +53,8 @@ def _request(url: str) -> urllib.request.Request:
 
 
 def api_assets(tag: str) -> list[dict[str, object]]:
-    with urllib.request.urlopen(_request(API.format(tag=tag)), timeout=60) as resp:  # noqa: S310
+    req = _request(API.format(tag=tag))  # GitHub-only: prefix checked in _request
+    with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 - checked URL
         data = json.load(resp)
     assets = data.get("assets")
     if not isinstance(assets, list):
@@ -92,7 +94,10 @@ def expected_digest(tag: str, name: str, lock: dict[str, str]) -> str:
 def download_verified(url: str, target: Path, expected: str) -> None:
     sha = hashlib.sha256()
     req = _request(url)
-    with urllib.request.urlopen(req, timeout=300) as resp, target.open("wb") as fh:  # noqa: S310
+    with (
+        urllib.request.urlopen(req, timeout=300) as resp,  # noqa: S310 - checked URL
+        target.open("wb") as fh,
+    ):
         while chunk := resp.read(1 << 20):
             sha.update(chunk)
             fh.write(chunk)
@@ -161,5 +166,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     for stream in (sys.stdout, sys.stderr):
-        stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8")
     raise SystemExit(main())

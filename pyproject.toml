@@ -83,8 +83,6 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Lazy imports are deliberate: optional heavy deps (torch/maia2) and a fast CLI start-up.
 "src/cca/cli.py" = ["PLC0415"]
-"src/cca/uci/protocol.py" = ["PLC0415"]
-"src/cca/engines/maia2_human.py" = ["PLC0415"]
 "tests/**" = ["S101", "D", "ANN", "PLR2004", "S311", "PLC0415", "S603"]
 "scripts/**" = ["T201", "D", "PLC0415"]
 

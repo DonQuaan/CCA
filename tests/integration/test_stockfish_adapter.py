@@ -139,22 +139,35 @@ def test_win_rate_model_matches_the_real_engine_wdl() -> None:
 
     import chess.engine
 
+    endgames = [  # material 1..36: the clamped floor (17) and the low-material range
+        "8/5pk1/6p1/8/3R4/6P1/5PK1/8 w - - 0 1",
+        "2r3k1/5ppp/8/8/8/8/5PPP/2R3K1 w - - 0 1",
+        "r4rk1/pp3ppp/2n5/8/8/2N5/PP3PPP/R4RK1 w - - 0 1",
+        "4r1k1/1p3pp1/p1n4p/8/3N4/1P4P1/P4P1P/3R2K1 b - - 0 1",
+        "8/8/4k3/3p4/3P4/4K3/8/8 w - - 0 1",
+        "6k1/5pp1/7p/8/8/5NP1/5PKP/1r6 w - - 0 1",
+        "8/2k5/8/2P5/1K6/8/8/8 w - - 0 1",
+    ]
     rng = random.Random(19)
     errors: list[float] = []
     with chess.engine.SimpleEngine.popen_uci(str(find_stockfish())) as eng:
         eng.configure({"UCI_ShowWDL": True, "Threads": 1, "Hash": 16})
-        board = chess.Board()
-        while len(errors) < 40 and not board.is_game_over():
+
+        def check(board: chess.Board) -> chess.engine.InfoDict:
             info = eng.analyse(board, chess.engine.Limit(nodes=20_000))
-            pov = info["score"].pov(board.turn)
-            cp = pov.score()
+            cp = info["score"].pov(board.turn).score()
             if cp is not None and "wdl" in info:
                 truth = info["wdl"].pov(board.turn).expectation()
                 errors.append(sf19_expected_score(cp, sf_material(board)) - truth)
-            best = info["pv"][0]
-            move = rng.choice(list(board.legal_moves)) if board.ply() % 5 == 4 else best
-            board.push(move)
-    assert len(errors) >= 20
-    # Integer cp costs up to ~0.006 per position; the per-mille WDL rounding 0.001.
-    assert max(abs(e) for e in errors) < 0.012, errors
-    assert abs(sum(errors) / len(errors)) < 0.002, errors  # no systematic bias
+            return info
+
+        for fen in endgames:
+            check(chess.Board(fen))
+        board = chess.Board()  # material 78 -> ~50 over a game with occasional odd moves
+        while len(errors) < 40 + len(endgames) and not board.is_game_over():
+            best = check(board)["pv"][0]
+            board.push(rng.choice(list(board.legal_moves)) if board.ply() % 5 == 4 else best)
+    assert len(errors) >= 30
+    # Measured: max 0.0010 (per-mille WDL rounding + integer cp), mean ~0.
+    assert max(abs(e) for e in errors) < 0.003, errors
+    assert abs(sum(errors) / len(errors)) < 0.001, errors  # no systematic bias

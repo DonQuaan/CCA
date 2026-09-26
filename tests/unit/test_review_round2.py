@@ -9,6 +9,7 @@ import dataclasses
 import hashlib
 import io
 import math
+import os
 import re
 import statistics
 import subprocess
@@ -519,3 +520,36 @@ def test_kl_weight_is_clamped(stress: float, u2: float, side: str) -> None:
     k = knobs_from_state(state, persona, elo_self=1500, elo_oppo=1500, current_score=0.5)
     lo, hi = persona.lam0 / persona.lam_range, persona.lam0 * persona.lam_range
     assert k.kl_weight == pytest.approx(hi if side == "hi" else lo)
+
+
+def test_cli_uci_round_trips_non_ascii_paths_over_a_pipe(tmp_path: Path) -> None:
+    """R001: GUIs send UTF-8; a cp1252 stream would mangle (or crash on) Vietnamese paths."""
+    env = {k: v for k, v in os.environ.items() if k not in {"PYTHONIOENCODING", "PYTHONUTF8"}}
+    folder = tmp_path / "CÔNG VIỆC" / "Tiếng Việt"
+    folder.mkdir(parents=True)
+    launcher = make_launcher(tmp_path)
+    missing = folder / "sf.exe"
+    cmd = [sys.executable, "-c", "import sys; from cca.cli import main; sys.exit(main(['uci']))"]
+    lines = [
+        f"setoption name StockfishPath value {missing}",
+        f"setoption name StockfishPath value {launcher}",
+        "setoption name CCA_HumanModel value qre",
+        "uci",
+        "isready",
+        "position startpos moves e2e4",
+        "go movetime 500",
+        "quit",
+    ]
+    p = subprocess.run(
+        cmd,
+        input="".join(ln + "\n" for ln in lines).encode("utf-8"),
+        capture_output=True,
+        env=env,
+        timeout=120,
+        check=False,
+    )
+    out = p.stdout.decode("utf-8")  # the whole stream must be valid UTF-8
+    assert p.returncode == 0, p.stderr.decode("utf-8", "replace")
+    assert "CÔNG VIỆC" in out  # decoded and re-encoded without loss
+    assert "readyok" in out
+    assert sum(ln.startswith("bestmove") for ln in out.splitlines()) == 1

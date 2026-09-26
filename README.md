@@ -14,6 +14,10 @@ CCA sits on top of **Stockfish 19** (spoken to over UCI, never embedded) and **M
 * **variable but reproducible** — latent stress / drive variables and a forced Lorenz
   attractor move its knobs from move to move; a node-limited game replays exactly from its seed.
 
+Despite the name, v0.1 has no tree search yet: a closed-form piKL policy over Stockfish's
+candidates stands in for the spec's chaos-driven `c_puct`; the PUCT back-end is on the roadmap
+(ADR-0003).
+
 > ⚠️ **Research status (v0.1.0).** The architecture is implemented and tested; its
 > *behavioural* claims are **hypotheses** with pre-registered kill criteria
 > (`docs/science.md`). The "neuro" mechanisms are labelled for what they are: latent control
