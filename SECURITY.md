@@ -18,6 +18,11 @@ within 7 days. Include a reproduction and the affected version.
   against GitHub's published digest, pins it in `engines/stockfish.lock.json`, and refuses
   archives containing path-traversal entries.
 * Neural-network weights are third-party artefacts. Loading untrusted PyTorch checkpoints can
-  execute code; only load weights from the official Maia-2 source.
+  execute code — torch 2.8 (capped by maia2 0.11) is affected by CVE-2026-24747 in its
+  `weights_only` unpickler. CCA therefore pins the SHA-256 of the official Maia-2 checkpoints
+  and refuses to load any other file (`cca.engines.maia2_human.PINNED_SHA256`).
+* Dependency advisories: `scripts/audit_deps.py` audits every locked pin (all platforms,
+  extras and groups). Accepted advisories are listed there with a reason tied to how CCA uses
+  the package and an expiry date after which the audit fails until they are re-assessed.
 * Fair play: running CCA to assist a human in rated games is cheating on every chess site.
   Online play must use an account flagged as a bot (e.g. a Lichess BOT account).

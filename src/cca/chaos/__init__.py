@@ -9,7 +9,7 @@ from cca.chaos.lorenz import LorenzOscillator, LorenzParams
 
 
 class ChaosDriver(Protocol):
-    """What the agent needs from a temperament driver."""
+    """What the agent needs from a variability driver (Lorenz or its control)."""
 
     def advance_ply(self, kick: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> None:
         """Absorb game-event kicks and advance one ply."""

@@ -1,7 +1,8 @@
 """Stockfish adapter over the UCI protocol.
 
 Stockfish (GPL-3.0) runs as a **separate process** and is only spoken to through UCI; CCA
-never links or embeds its code. Evaluations are converted to expected score with the
+never links its code — only its published win-rate formula and fitted coefficients are
+re-implemented below (with attribution). Evaluations are converted to expected score with the
 engine's own WDL output (``UCI_ShowWDL``) when available. Otherwise the Stockfish 17+
 material-based win-rate model is applied (ported from ``src/uci.cpp`` at tag ``sf_19``).
 python-chess's ``Score.wdl(model="sf")`` is *not* used: it is the SF16.1 move-number model and

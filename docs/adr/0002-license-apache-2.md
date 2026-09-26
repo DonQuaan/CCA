@@ -1,6 +1,6 @@
 # ADR-0002 — Apache-2.0 for CCA's own code; third parties at arm's length
 
-* Status: accepted · 2026-09-25
+* Status: accepted · 2026-09-25 · amended before release by ADR-0006
 
 ## Context
 The owner wants CCA to be 100 % open: anyone may modify and reuse it, provided they credit
@@ -18,9 +18,13 @@ while its model weights are CC BY-NC 4.0.
   one-way compatible with GPL-3.0, so a combined distribution is possible under GPL-3.0
   terms; the math core (`chaos`, `neuro`, `policy`, `timing`, `core`) imports nothing from
   GPL code so it can be reused on its own under Apache-2.0.
-* Code from non-commercial or copyleft projects is **never copied**, and no third-party code is
-  copied at all in v0.1; algorithms (piKL, QRE, Active Inference) are re-implemented from the
-  papers. Third-party weights are never rehosted.
+* Code from non-commercial or copyleft projects is **never copied**; algorithms (piKL, QRE,
+  Active Inference) are re-implemented from the papers. The only third-party-derived content in
+  v0.1 is Stockfish's win-rate formula and its 8 fitted coefficients (`sf_19` `src/uci.cpp`
+  `win_rate_params`, from official-stockfish/WDL_model, GPL-3.0-or-later), re-implemented in
+  `cca.engines.stockfish` as a functional formula with numeric parameters, with attribution,
+  in the adapter layer — not in the Apache-only math core. Third-party weights are never
+  rehosted.
 * Confirmed by the owner on 2026-09-25 after reviewing the GPL-3.0 alternative.
 
 ## Consequences

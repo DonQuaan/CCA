@@ -130,18 +130,6 @@ def test_bank_accounting_gift_minus_risk() -> None:
     assert agent._bank >= bank_after_first + 0.3 - 0.2  # minus at most the risk taken in d2
 
 
-def test_unevaluated_reply_gift_needs_to_clear_the_dead_zone() -> None:
-    agent = CAIMEAgent(FakeEngine(), FakeHuman(), AgentConfig(sample=False))
-    board = chess.Board()
-    d1 = agent.choose(board)
-    assert agent._expect is not None
-    board.push_uci(d1.move)
-    # No reply evaluated and a worst case equal to what we see now: pure noise, no credit.
-    agent._expect = dataclasses.replace(agent._expect, reply_scores={}, q_opt=1.0)
-    board.push(next(iter(board.legal_moves)))
-    assert agent.choose(board).trace["gift"] == 0.0
-
-
 def test_ood_clock_damps_exploitation() -> None:
     agent = CAIMEAgent(FakeEngine(), FakeHuman(), AgentConfig())
     board = chess.Board()

@@ -9,7 +9,7 @@ repos:
       - id: trailing-whitespace
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: ["--maxkb=512"]
+        args: ["--maxkb=512", "--enforce-all"] # also files already in the tree (CI runs --all-files)
       - id: detect-private-key
       - id: mixed-line-ending
         args: ["--fix=lf"]

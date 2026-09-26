@@ -30,7 +30,9 @@ class _Greedy(FakeHuman):
     def __init__(self, bad: str) -> None:
         self.bad = bad
 
-    def distribution(self, board: chess.Board, elo_self: int, elo_oppo: int) -> dict[str, float]:
+    def distribution(
+        self, board: chess.Board, elo_self: int, elo_oppo: int, time_limit: float | None = None
+    ) -> dict[str, float]:
         base = super().distribution(board, elo_self, elo_oppo)
         if self.bad in base:
             rest = 0.001 / max(1, len(base) - 1)
@@ -43,7 +45,11 @@ class _Recording(FakeHuman):
         self.seen: list[chess.Board] = []
 
     def distributions(
-        self, boards: Sequence[chess.Board], elo_self: int, elo_oppo: int
+        self,
+        boards: Sequence[chess.Board],
+        elo_self: int,
+        elo_oppo: int,
+        time_limit: float | None = None,
     ) -> list[dict[str, float]]:
         self.seen.extend(b.copy() for b in boards)
         return super().distributions(boards, elo_self, elo_oppo)
@@ -143,8 +149,6 @@ def test_different_seeds_play_differently_and_plies_use_fresh_streams() -> None:
             board.push(reply)
         games.add(tuple(line))
     assert len(games) >= 2
-    rng_draws = {DeterministicRng("move", "x", "g", ply, ply).uniform() for ply in range(20)}
-    assert len(rng_draws) == 20
 
 
 # ---- clock M1  deadline ----

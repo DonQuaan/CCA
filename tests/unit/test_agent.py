@@ -38,7 +38,7 @@ def test_agent_plays_legal_moves_and_is_reproducible(
     assert ma == mb
     assert a.chaos_digest == b.chaos_digest
     c = CAIMEAgent(FakeEngine(), FakeHuman(), AgentConfig(seed="other"), game_id="g")
-    assert _play(c, fake_human, 24) != ma or c.chaos_digest != a.chaos_digest
+    assert _play(c, fake_human, 24) != ma  # a different seed must change the game
 
 
 def test_decision_invariants(fake_engine: FakeEngine, fake_human: FakeHuman) -> None:
@@ -118,7 +118,9 @@ def test_cp_helper() -> None:
 class _PeakedHuman(FakeHuman):
     """Pathological prior (like Maia-2's opening knight shuffle): 99% on one move."""
 
-    def distribution(self, board: chess.Board, elo_self: int, elo_oppo: int) -> dict[str, float]:
+    def distribution(
+        self, board: chess.Board, elo_self: int, elo_oppo: int, time_limit: float | None = None
+    ) -> dict[str, float]:
         base = super().distribution(board, elo_self, elo_oppo)
         if not base:
             return base

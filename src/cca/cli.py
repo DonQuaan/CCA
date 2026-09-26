@@ -109,15 +109,13 @@ def cmd_analyse(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_manifest(
-    args: argparse.Namespace, engine: SearchEngine, human: HumanModel, cfg: AgentConfig
-) -> dict[str, object]:
-    """Everything needed to reproduce a benchmark run."""
+def _git(repo: Path, *args: str) -> str | None:
     import subprocess
 
     try:
-        commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"],  # noqa: S607
+        # Argument list (no shell); args are literals from this module, repo a resolved path.
+        return subprocess.run(  # noqa: S603
+            ["git", "-C", str(repo), *args],  # noqa: S607
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -125,7 +123,38 @@ def run_manifest(
             timeout=10,
         ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
-        commit = "unknown"
+        return None
+
+
+def _sha256(path: object) -> str | None:
+    import hashlib
+
+    if not isinstance(path, (str, Path)) or not Path(path).is_file():
+        return None
+    h = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        while chunk := fh.read(1 << 20):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def code_provenance() -> dict[str, object]:
+    """Commit and dirty flag of the checkout the *running package* comes from (not the cwd)."""
+    pkg = Path(__file__).resolve().parent
+    top = _git(pkg, "rev-parse", "--show-toplevel")
+    if top is None or not pkg.is_relative_to(Path(top).resolve()):
+        return {"git_commit": "unknown", "git_dirty": None}
+    status = _git(Path(top), "status", "--porcelain", "--untracked-files=no")
+    return {
+        "git_commit": _git(Path(top), "rev-parse", "HEAD") or "unknown",
+        "git_dirty": bool(status),
+    }
+
+
+def run_manifest(
+    args: argparse.Namespace, engine: SearchEngine, human: HumanModel, cfg: AgentConfig
+) -> dict[str, object]:
+    """Everything needed to reproduce a benchmark run (code, binaries, weights, settings)."""
     human_version = "n/a"
     if importlib.util.find_spec("maia2"):
         from importlib.metadata import PackageNotFoundError, version
@@ -136,7 +165,9 @@ def run_manifest(
             human_version = "unknown"
     return {
         "cca_version": __version__,
-        "git_commit": commit,
+        **code_provenance(),
+        "engine_sha256": _sha256(getattr(engine, "path", None)),
+        "maia2_checkpoint_sha256": _sha256(getattr(human, "checkpoint", None)),
         "python": platform.python_version(),
         "platform": platform.platform(),
         "engine": getattr(engine, "name", type(engine).__name__),

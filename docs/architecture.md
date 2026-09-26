@@ -14,7 +14,8 @@ constraint and moves the "humanity" into the **decision**:
 2. **What will this opponent probably answer?** — Maia-2 at the opponent's rating, flattened
    when the opponent is (estimated to be) under stress: the *opponent model*.
 3. **What is objectively true?** — Stockfish 19 WDL → expected score: the *constraint*.
-4. **Who am I right now?** — latent stress / drive + a strange attractor: the *temperament*.
+4. **Which knob settings right now?** — latent stress / drive + a strange attractor (or its
+   stochastic control): a structured source of variability, not a model of temperament.
 
 The gap between (2) and (3) is the "key weakness between human and machine": moves after
 which the human reply distribution puts mass on losing replies (**trap value**

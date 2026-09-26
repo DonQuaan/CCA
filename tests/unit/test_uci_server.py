@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import chess
+import pytest
 
 from cca.agent import AgentConfig, CAIMEAgent
 from cca.uci.protocol import UciServer, parse_go, parse_position, parse_uci_opponent
@@ -68,10 +69,13 @@ def test_echoed_secret_placeholder_keeps_the_seed_secret(
     assert server._config().seed == server._secret_seed != "<secret>"
 
 
-def test_every_go_answers_bestmove_even_if_the_engine_cannot_start(tmp_path: Path) -> None:
+def test_every_go_answers_bestmove_even_if_the_engine_cannot_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # StockfishPath now rejects missing files up front, so make discovery itself fail.
+    monkeypatch.setenv("CCA_STOCKFISH", str(tmp_path / "missing.exe"))
     out = io.StringIO()
     server = UciServer(stdin=io.StringIO(""), stdout=out)
-    server.handle(f"setoption name StockfishPath value {tmp_path / 'missing.exe'}")
     server.handle("position startpos moves e2e4")
     server.handle("go wtime 1000 btime 1000")
     server._join()
@@ -80,7 +84,8 @@ def test_every_go_answers_bestmove_even_if_the_engine_cannot_start(tmp_path: Pat
     assert (
         chess.Move.from_uci(moves[0]) in parse_position(["startpos", "moves", "e2e4"]).legal_moves
     )
-    assert "info string error" in out.getvalue()
+    assert "EngineNotFoundError" in out.getvalue()  # the engine really failed to start
+    assert server._engine is None
     server._shutdown()
 
 

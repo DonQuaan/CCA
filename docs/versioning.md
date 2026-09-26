@@ -40,5 +40,7 @@ may differ in the last bits across hardware; chaos inputs are quantised to limit
 4. Independent review of the diff (bugs, maths, security, licences).
 5. `git commit -m "chore(release): vX.Y.Z"` then
    `git tag -a vX.Y.Z -m "CCA vX.Y.Z — <one-line summary>"`.
-6. `git push && git push origin vX.Y.Z` → the `Release` workflow re-checks the tag, runs the
-   tests, builds sdist/wheel and publishes a GitHub Release with the CHANGELOG notes.
+6. `git push`, wait for **green CI on `main`**, then `git push origin vX.Y.Z` → the `Release`
+   workflow runs the full CI again (Linux/Windows × 3.11–3.13, hygiene hooks, real Stockfish,
+   dependency audit), requires an **annotated** tag on a commit of `main`, re-checks version and
+   CHANGELOG, builds sdist/wheel and publishes a GitHub Release with the CHANGELOG notes.

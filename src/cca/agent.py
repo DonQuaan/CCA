@@ -185,9 +185,9 @@ class CAIMEAgent:
             raise ValueError("position is already game over")
         cfg = self.config
         clock = clock or Clock()
-        self._deadline, self._stop = deadline, stop
         trace: dict[str, float] = {}
-        self._sync_history(board)
+        self._sync_history(board)  # may call new_game(): set per-call limits *after* it
+        self._deadline, self._stop = deadline, stop
         if deadline is not None and deadline - time.monotonic() < cfg.fast_budget:
             return self._reflex(board, clock, trace)
 
@@ -206,7 +206,7 @@ class CAIMEAgent:
         self.state = replace(self.state, chaos=self._osc.signals())
 
         # 4. Candidate set (the anchor is tempered where the human model is out of distribution).
-        prior_full = self.human.distribution(board, cfg.elo_self, cfg.elo_oppo)
+        prior_full = self._own_prior(board, trace)
         prior_anchor = prior_full
         if self._in_opening(board) and cfg.opening_temperature != 1.0:
             prior_anchor = temper(prior_full, cfg.opening_temperature)
@@ -224,7 +224,7 @@ class CAIMEAgent:
         self._bank -= max(0.0, max(c.q_opt for c in candidates) - chosen.q_opt)  # risk taken
 
         # 7. Theory of mind; 8. timing.
-        our_excess = self._update_opponent_model(board, clock, prior_full, move)
+        our_excess = self._update_opponent_model(board, clock, prior_anchor, move)
         think = self._think(board, clock, prior_full)
 
         fen_after, dist_after, scores_after = lookups[move]
@@ -332,6 +332,16 @@ class CAIMEAgent:
         )
 
     # ------------------------------------------------------------------ helpers
+    def _own_prior(self, board: chess.Board, trace: dict[str, float]) -> dict[str, float]:
+        """The agent's human prior; uniform when there is no time left to compute it."""
+        if self._out_of_time():
+            trace["prior_skipped"] = 1.0
+            legal = [m.uci() for m in board.legal_moves]
+            return dict.fromkeys(legal, 1.0 / len(legal))
+        return self.human.distribution(
+            board, self.config.elo_self, self.config.elo_oppo, time_limit=self._slice(4)
+        )
+
     def _out_of_time(self) -> bool:
         if self._stop is not None and self._stop.is_set():
             return True
@@ -427,8 +437,12 @@ class CAIMEAgent:
                 gift = max(0.0, v_now - exp.q_opt - cfg.bank_dead_zone)
             self._bank += gift
             trace["gift"] = gift
+        elif self._out_of_time():
+            dist, rpe = {}, 0.0  # no time to model the opponent's move: no surprise signal
         else:
-            dist = self.human.distribution(before, cfg.elo_oppo, cfg.elo_self)
+            dist = self.human.distribution(
+                before, cfg.elo_oppo, cfg.elo_self, time_limit=self._slice(5)
+            )
             rpe = 0.0
         if dist and self._in_opening(before) and cfg.opening_temperature != 1.0:
             dist = temper(dist, cfg.opening_temperature)  # the raw opening prior is unreliable
@@ -475,8 +489,12 @@ class CAIMEAgent:
         for uci, child in afters.items():
             child.push_uci(uci)
         live = [u for u in cand_moves if not is_ended(afters[u])]
-        batched = self.human.distributions([afters[u] for u in live], cfg.elo_oppo, cfg.elo_self)
-        opp_dists = dict(zip(live, batched, strict=True))
+        opp_dists: dict[str, dict[str, float]] = {}
+        if live and not self._out_of_time():
+            batched = self.human.distributions(
+                [afters[u] for u in live], cfg.elo_oppo, cfg.elo_self, time_limit=self._slice(2)
+            )
+            opp_dists = dict(zip(live, batched, strict=True))
         candidates: list[Candidate] = []
         lookups: dict[str, tuple[str, dict[str, float], dict[str, float]]] = {}
         for i, uci in enumerate(cand_moves):

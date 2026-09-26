@@ -52,16 +52,24 @@ class SearchEngine(Protocol):
 class HumanModel(Protocol):
     """A model of *which move a human would play* (the "human" side of the gap)."""
 
-    def distribution(self, board: chess.Board, elo_self: int, elo_oppo: int) -> dict[str, float]:
+    def distribution(
+        self, board: chess.Board, elo_self: int, elo_oppo: int, time_limit: float | None = None
+    ) -> dict[str, float]:
         """Probability of each legal move for the side to move.
 
         ``elo_self`` is the rating of the human to move, ``elo_oppo`` the rating of the
-        other side. Keys are UCI strings; values sum to 1 over legal moves.
+        other side. Keys are UCI strings; values sum to 1 over legal moves. ``time_limit``
+        (seconds) bounds models that search (the engine-derived QRE model); neural models
+        may ignore it.
         """
         ...
 
     def distributions(
-        self, boards: Sequence[chess.Board], elo_self: int, elo_oppo: int
+        self,
+        boards: Sequence[chess.Board],
+        elo_self: int,
+        elo_oppo: int,
+        time_limit: float | None = None,
     ) -> list[dict[str, float]]:
-        """Batched :meth:`distribution` (GPU models should override for throughput)."""
+        """Batched :meth:`distribution`; ``time_limit`` is the budget for the whole batch."""
         ...

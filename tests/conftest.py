@@ -107,7 +107,9 @@ class FakeEngine:
 class FakeHuman:
     """Humans like captures and checks; otherwise a smooth preference by move string."""
 
-    def distribution(self, board: chess.Board, elo_self: int, elo_oppo: int) -> dict[str, float]:
+    def distribution(
+        self, board: chess.Board, elo_self: int, elo_oppo: int, time_limit: float | None = None
+    ) -> dict[str, float]:
         del elo_oppo
         scale = elo_self / 1500.0
         logits: dict[str, float] = {}
@@ -127,7 +129,11 @@ class FakeHuman:
         return {k: v / total for k, v in ex.items()}
 
     def distributions(
-        self, boards: Sequence[chess.Board], elo_self: int, elo_oppo: int
+        self,
+        boards: Sequence[chess.Board],
+        elo_self: int,
+        elo_oppo: int,
+        time_limit: float | None = None,
     ) -> list[dict[str, float]]:
         return [self.distribution(b, elo_self, elo_oppo) for b in boards]
 

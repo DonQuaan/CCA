@@ -44,20 +44,29 @@ class QREHumanModel:
         """Logit precision ``mu(R)`` for a player of rating ``elo``."""
         return self._mu0 * math.pow(2.0, (elo - 1500) / self._doubling)
 
-    def distribution(self, board: chess.Board, elo_self: int, elo_oppo: int) -> dict[str, float]:
+    def distribution(
+        self, board: chess.Board, elo_self: int, elo_oppo: int, time_limit: float | None = None
+    ) -> dict[str, float]:
         """Logit response of the side to move over *all* legal moves."""
         del elo_oppo  # the simple QRE model ignores the opponent's rating
         n_legal = board.legal_moves.count()
         if n_legal == 0:
             return {}
-        evals = self._engine.evaluate(board, perspective=board.turn, multipv=n_legal)
+        evals = self._engine.evaluate(
+            board, perspective=board.turn, multipv=n_legal, time_limit=time_limit
+        )
         values = {e.uci: e.q for e in evals}
         for move in board.legal_moves:  # engines may drop lines; never lose a legal move
             values.setdefault(move.uci(), min(values.values(), default=0.5))
         return logit_quantal_response(values, self.precision(elo_self))
 
     def distributions(
-        self, boards: Sequence[chess.Board], elo_self: int, elo_oppo: int
+        self,
+        boards: Sequence[chess.Board],
+        elo_self: int,
+        elo_oppo: int,
+        time_limit: float | None = None,
     ) -> list[dict[str, float]]:
-        """Sequential batch."""
-        return [self.distribution(b, elo_self, elo_oppo) for b in boards]
+        """Sequential batch; ``time_limit`` is split evenly over the boards."""
+        per = None if time_limit is None else time_limit / max(1, len(boards))
+        return [self.distribution(b, elo_self, elo_oppo, per) for b in boards]

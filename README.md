@@ -52,13 +52,19 @@ uv run cca doctor                         # checks Python, engine, optional GPU
 ```
 
 **Maia-2 (optional, recommended).** `maia2` 0.11 supports **Python 3.10–3.12** only, and the
-PyPI `torch` wheel for Windows is CPU-only. On a CUDA machine:
+PyPI `torch` wheel for Windows is CPU-only, so use a separate environment with the CUDA wheel
+installed first (this is the recipe used for the v0.1.0 validation on an RTX 4060):
 
 ```bash
-uv venv --python 3.12
-uv pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-uv sync --extra maia2                     # first use downloads the 267 MB rapid checkpoint
+uv venv .venv-maia2 --python 3.12
+uv pip install --python .venv-maia2 torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+uv pip install --python .venv-maia2 -e ".[maia2]" pytest hypothesis
+.venv-maia2/Scripts/python -m pytest -m maia2   # Linux/macOS: .venv-maia2/bin/python
 ```
+
+The first use downloads the 267 MB rapid checkpoint into `weights/maia2/` (override with
+`CCA_WEIGHTS`); CCA refuses any checkpoint whose SHA-256 differs from the pinned official file.
+On Git Bash, pass Windows paths to tools (`cygpath -w`): `uv` resolves `/d/...` as `D:\d\...`.
 
 Without Maia-2, `--human qre` uses an engine-derived logit-QRE human model (a baseline with
 unfitted parameters — it cannot represent systematic human blind spots).

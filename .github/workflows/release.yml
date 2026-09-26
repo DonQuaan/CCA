@@ -8,8 +8,13 @@ permissions:
   contents: read
 
 jobs:
+  ci:
+    name: full CI (matrix, hygiene, Stockfish, audit)
+    uses: ./.github/workflows/ci.yml
+
   verify:
     name: release gate
+    needs: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -18,23 +23,14 @@ jobs:
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           python-version: "3.13"
-      - name: Tagged commit must be on main
+      - name: Tag must be annotated and its commit must be on main
         run: |
+          test "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")" = tag
           git fetch origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - run: uv sync --frozen
       - name: Tag must equal package version and have a CHANGELOG entry
         run: uv run python scripts/check_release.py "${GITHUB_REF_NAME}"
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run mypy
-      - run: uv run pytest -m "not engine and not maia2"
-      - name: Engine tests against Stockfish 19
-        run: |
-          uv run python scripts/fetch_stockfish.py --os linux --arch x86-64
-          export CCA_STOCKFISH="$(find engines -type f -name 'stockfish-linux-x86-64-universal' | head -n1)"
-          chmod +x "$CCA_STOCKFISH"
-          uv run pytest -m engine
       - run: uv build
       - run: uv run python scripts/check_release.py "${GITHUB_REF_NAME}" --notes > RELEASE_NOTES.md
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

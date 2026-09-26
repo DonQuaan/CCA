@@ -26,12 +26,15 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import io
+import os
 import queue
 import secrets
 import sys
 import threading
 import time
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 import chess
@@ -43,6 +46,8 @@ from cca.config import list_personas, load_persona
 from cca.core.types import Clock
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from cca.core.types import Decision
     from cca.engines.base import HumanModel, SearchEngine
 
@@ -122,6 +127,61 @@ def parse_go(tokens: list[str], turn: chess.Color) -> tuple[Clock, float | None,
     return clock, _get("movetime"), infinite
 
 
+def _is_windows_pipe(stream: TextIO) -> bool:
+    if sys.platform != "win32":
+        return False
+    try:
+        import _winapi  # type: ignore[import-not-found,unused-ignore]
+        import msvcrt
+
+        handle = msvcrt.get_osfhandle(stream.fileno())
+        return bool(_winapi.GetFileType(handle) == _winapi.FILE_TYPE_PIPE)
+    except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
+        return False
+
+
+def _line_reader(stream: TextIO, put: Callable[[str | None], None]) -> None:
+    for raw in stream:
+        put(raw)
+    put(None)
+
+
+def _pipe_reader(stream: TextIO, put: Callable[[str | None], None]) -> None:
+    """Read a Windows pipe without ever leaving a blocking ``ReadFile`` pending.
+
+    With a synchronous read pending on the stdin pipe, loading native libraries in another
+    thread (``import torch``, CUDA/cuDNN on the first forward pass) deadlocks until the read
+    returns — and a GUI waiting for ``readyok`` never writes. Measured on this project: import
+    torch + CUDA matmul/conv took 1.4 s with no reader, 1.4 s with this polling reader, and hung
+    for > 90 s with a blocking reader. So: peek, and only read bytes that are already there.
+    """
+    import _winapi  # type: ignore[import-not-found,unused-ignore]
+    import msvcrt
+
+    fd = stream.fileno()
+    handle = msvcrt.get_osfhandle(fd)
+    buf = b""
+    while True:
+        try:
+            peeked = _winapi.PeekNamedPipe(handle, 0)
+        except OSError:  # writer closed the pipe: EOF
+            break
+        avail = int(peeked[-2])  # (avail, left) for size 0; (data, avail, left) otherwise
+        if not avail:
+            time.sleep(0.005)
+            continue
+        chunk = os.read(fd, avail)
+        if not chunk:
+            break
+        buf += chunk
+        *lines, buf = buf.split(b"\n")
+        for line in lines:
+            put(line.decode("utf-8", errors="replace").rstrip("\r") + "\n")
+    if buf:
+        put(buf.decode("utf-8", errors="replace"))
+    put(None)
+
+
 _COMBOS: dict[str, tuple[str, ...]] = {
     "CCA_HumanModel": ("maia2", "qre"),
     "CCA_Maia2Type": ("rapid", "blitz"),
@@ -138,6 +198,8 @@ _ENGINE_OPTIONS = frozenset(
         "CCA_Device",
     }
 )
+# Stockfish options only: changing them must not throw away an expensive Maia-2 model.
+_STOCKFISH_OPTIONS = frozenset({"StockfishPath", "Threads", "Hash", "CCA_Nodes"})
 # GUIs echo advertised defaults back verbatim; these placeholders mean "unset".
 _PLACEHOLDERS = frozenset({"<auto>", "<empty>", "<secret>"})
 
@@ -167,17 +229,20 @@ class UciServer:
         self._opts.update({k: str(v[0]) for k, v in _SPIN_LIMITS.items()})
         self._agent: CAIMEAgent | None = None
         self._engine: SearchEngine | None = None
-        self._board = chess.Board()
+        self._board: chess.Board | None = chess.Board()
         self._worker: threading.Thread | None = None
         self._stop = threading.Event()
         self._ponderhit = threading.Event()
         self._engine_dead = threading.Event()
         self._games = 0
         # Unset CCA_Seed -> a fresh secret seed per game, committed (SHA-256) before the first
-        # move and revealed when the game ends, so opponents cannot replay the temperament
+        # move and revealed when the game ends, so opponents cannot replay the variability
         # during the game but anyone can audit it afterwards.
         self._secret_seed = secrets.token_hex(16)
         self._committed = False
+        self._game_seed = ""
+        self._reveal_pending = False
+        self._maia: HumanModel | None = None  # survives Stockfish-only option changes
 
     # ------------------------------------------------------------------ io
     def send(self, line: str) -> None:
@@ -187,20 +252,17 @@ class UciServer:
             self._out.flush()
 
     def serve(self) -> None:
-        """Read commands until ``quit`` or EOF."""
+        """Read commands until ``quit`` or EOF (engines are always shut down)."""
         lines: queue.Queue[str | None] = queue.Queue()
-
-        def reader() -> None:
-            for raw in self._in:
-                lines.put(raw)
-            lines.put(None)
-
-        threading.Thread(target=reader, daemon=True).start()
-        while True:
-            raw = lines.get()
-            if raw is None or not self.handle(raw.strip()):
-                break
-        self._shutdown()
+        reader = _pipe_reader if _is_windows_pipe(self._in) else _line_reader
+        threading.Thread(target=reader, args=(self._in, lines.put), daemon=True).start()
+        try:
+            while True:
+                raw = lines.get()
+                if raw is None or not self.handle(raw.strip()):
+                    break
+        finally:
+            self._shutdown()
 
     def handle(self, line: str) -> bool:
         """Process one command; return ``False`` on ``quit``."""
@@ -220,6 +282,7 @@ class UciServer:
                 self._new_game()
             elif cmd == "position":
                 self._join()
+                self._board = None  # a rejected position must not leave the old board in place
                 self._board = parse_position(args)
             elif cmd == "go":
                 self._cmd_go(args)
@@ -269,6 +332,8 @@ class UciServer:
             if match is None:
                 raise ValueError(f"option {name} must be one of {list(choices)}, got {value!r}")
             return match
+        if name == "StockfishPath" and not Path(value).is_file():
+            raise ValueError(f"StockfishPath {value!r} is not a file; keeping the current engine")
         if name == "CCA_EmulateThinkTime":
             if value.lower() not in {"true", "false"}:
                 raise ValueError(f"option {name} must be true or false, got {value!r}")
@@ -288,7 +353,7 @@ class UciServer:
         old = self._opts[name]
         self._opts[name] = value
         if name in _ENGINE_OPTIONS:
-            self._drop_engines()
+            self._drop_engines(keep_human=name in _STOCKFISH_OPTIONS)
         elif self._agent is not None:
             try:
                 self._agent.config = self._config()
@@ -302,6 +367,10 @@ class UciServer:
             self._drop_engines()
             self._engine_dead.clear()
             self.send("info string cca engine process died; restarted")
+        if self._board is None:
+            self.send("info string error: no valid position; answering the null move")
+            self.send("bestmove 0000")
+            return
         clock, movetime, infinite = parse_go(args, self._board.turn)
         ponder = "ponder" in args
         board = self._board.copy()
@@ -318,28 +387,23 @@ class UciServer:
         """Worker thread: exactly one ``bestmove`` on every path."""
         move: str | None = None
         try:
-            if ponder:
-                # Never touch the agent on a *guessed* position: its affect/chaos state must
-                # only see moves that were really played. Wait for ponderhit or stop.
-                while not (self._ponderhit.is_set() or self._stop.is_set()):
-                    self._ponderhit.wait(0.01)
-                if not self._ponderhit.is_set():
-                    return  # the finally clause answers with a fallback move
+            # Never touch the agent on a *guessed* position: its affect/chaos state must only
+            # see moves that were really played. Wait for ponderhit or stop.
+            if ponder and not self._await_ponderhit():
+                return  # the finally clause answers with a fallback move
             start = time.monotonic()
             agent = self._ensure_agent()
             if not self._committed:
                 self._commit()
-            deadline = None if infinite else agent.deadline_for(board, clock, movetime)
+            deadline = None
+            if not infinite:
+                deadline = agent.deadline_for(board, clock, movetime)
+                if deadline is not None:  # the clock already ran while engines were (re)built
+                    deadline -= time.monotonic() - start
             decision = agent.choose(board, clock, deadline=deadline, stop=self._stop)
             move = decision.move
             self._report(decision)
-            wait = decision.think_time if self._opts["CCA_EmulateThinkTime"] == "true" else 0.0
-            if deadline is not None:
-                wait = min(wait, max(0.0, deadline - time.monotonic()))
-            if infinite:
-                self._stop.wait()
-            elif wait - (time.monotonic() - start) > 0:
-                self._stop.wait(wait - (time.monotonic() - start))
+            self._hold(start + decision.think_time, deadline, infinite)
         except chess.engine.EngineError as exc:
             self._engine_dead.set()
             self.send(f"info string error: engine failed ({exc}); it will be restarted")
@@ -350,6 +414,22 @@ class UciServer:
                 legal = next(iter(board.legal_moves), None)
                 move = legal.uci() if legal else "0000"
             self.send(f"bestmove {move}")
+
+    def _await_ponderhit(self) -> bool:
+        while not (self._ponderhit.is_set() or self._stop.is_set()):
+            self._ponderhit.wait(0.01)
+        return self._ponderhit.is_set()
+
+    def _hold(self, think_end: float, deadline: float | None, infinite: bool) -> None:
+        """Wait before answering: until ``stop`` (infinite), or the emulated think time."""
+        if infinite:
+            self._stop.wait()
+            return
+        if self._opts["CCA_EmulateThinkTime"] != "true":
+            return
+        end = think_end if deadline is None else min(think_end, deadline)
+        if end > time.monotonic():
+            self._stop.wait(end - time.monotonic())
 
     def _report(self, decision: Decision) -> None:
         k, s, t = decision.knobs, decision.state, decision.trace
@@ -364,20 +444,28 @@ class UciServer:
 
     # ------------------------------------------------------------------ seeds
     def _commit(self) -> None:
+        """Fix this game's seed at its first move; publish a commitment if it is secret."""
         self._committed = True
-        if not self._opts["CCA_Seed"]:
+        self._game_seed = self._opts["CCA_Seed"] or self._secret_seed
+        self._reveal_pending = not self._opts["CCA_Seed"]
+        if self._agent is not None and self._agent.config.seed != self._game_seed:
+            self._agent.config = replace(self._agent.config, seed=self._game_seed)
+        if self._reveal_pending:
             digest = hashlib.sha256(self._secret_seed.encode("utf-8")).hexdigest()
             self.send(f"info string cca game {self._games} seed commitment sha256:{digest}")
 
     def _reveal(self) -> None:
-        if self._committed and not self._opts["CCA_Seed"]:
+        """Open the commitment of the game that just ended (only if one was published)."""
+        if self._reveal_pending:
             self.send(f"info string cca game {self._games} seed reveal {self._secret_seed}")
+            self._reveal_pending = False
 
     def _new_game(self) -> None:
         self._reveal()
         self._games += 1
         self._secret_seed = secrets.token_hex(16)
         self._committed = False
+        self._game_seed = ""
         if self._agent is not None:
             self._agent.config = self._config()
             self._agent.new_game(f"uci-{self._games}")
@@ -390,7 +478,10 @@ class UciServer:
             persona=load_persona(self._opts["CCA_Persona"]),
             elo_self=int(self._opts["UCI_Elo"]),
             elo_oppo=opp,
-            seed=self._opts["CCA_Seed"] or self._secret_seed,
+            # Once a game has committed to a seed, option changes cannot switch it mid-game.
+            seed=self._game_seed
+            if self._committed
+            else (self._opts["CCA_Seed"] or self._secret_seed),
         )
 
     def _warm_up(self) -> None:
@@ -423,14 +514,18 @@ class UciServer:
 
     def _human_model(self, engine: SearchEngine) -> HumanModel:
         if self._opts["CCA_HumanModel"] == "maia2":
+            if self._maia is not None:
+                return self._maia
             try:
                 from cca.engines.maia2_human import Maia2HumanModel
 
-                return Maia2HumanModel(
+                self._maia = Maia2HumanModel(
                     model_type=self._opts["CCA_Maia2Type"], device=self._opts["CCA_Device"]
                 )
-            except ImportError as exc:
+            except Exception as exc:  # import, CUDA, download or file errors -> QRE fallback
                 self.send(f"info string maia2 unavailable ({exc}); falling back to QRE human model")
+            else:
+                return self._maia
         from cca.engines.qre_human import QREHumanModel
 
         return QREHumanModel(engine)
@@ -442,13 +537,15 @@ class UciServer:
             self._worker = None
             self._stop.clear()
 
-    def _drop_engines(self) -> None:
+    def _drop_engines(self, *, keep_human: bool = False) -> None:
         self._join()
         if self._engine is not None:
             with contextlib.suppress(Exception):
                 self._engine.close()
         self._engine = None
         self._agent = None
+        if not keep_human:
+            self._maia = None
 
     def _shutdown(self) -> None:
         self._stop.set()

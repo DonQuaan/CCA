@@ -1,6 +1,6 @@
 # ADR-0004 — Deterministic chaos that replays bit-identically
 
-* Status: accepted · 2026-09-25
+* Status: accepted · 2026-09-25 · amended before release by ADR-0006
 
 ## Decision
 * Lorenz-63 integrated in **pure Python floats** with classical RK4 in a fixed operation
