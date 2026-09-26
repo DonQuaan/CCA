@@ -26,7 +26,7 @@ CACHE = ROOT / ".cache"  # keep pip-audit's cache and temp files inside the repo
 
 # Accepted advisories. Every entry needs a reason tied to how CCA uses the package and an
 # expiry date; an expired entry fails the audit so the decision is re-made, not forgotten.
-# All seven are in torch 2.8.0, pulled only by the optional `maia2` extra (maia2 0.11 caps
+# All eight are in torch 2.8.0, pulled only by the optional `maia2` extra (maia2 0.11 caps
 # torch < 2.9). Assessed 2026-09-26 against the OSV records.
 REVIEW_BY = date(2027, 3, 31)
 ACCEPTED = {

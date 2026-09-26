@@ -80,6 +80,11 @@ First research release of the C-AIME decision core.
 - **Tests:** mutation-guided regression tests for every finding whose earlier test was
   vacuous (exploitation wiring, perspective of extra candidates, tunnel vs habit, per-ply
   sampling, win attribution, negative bank, dead zone, movetime/stop, pipe reader, ...).
+  Each was checked by reverting its fix (24/24 turned a test red); an independent second
+  mutation round then found three untested round-1 guards (risk debit, `λ_KL` clamp, win-rate
+  coefficients), now covered. The enforcement scripts (release gate, verified Stockfish fetch,
+  dependency audit) have behavioural tests, and the SF17–19 win-rate port is checked against
+  the real engine's own WDL output (max error < 0.012, no bias).
 
 ### Fixed (pre-release adversarial review, round 1: 7 lenses, 55 verified findings)
 - **Benchmark:** the "Stockfish-UCI_Elo" opponent played full-strength PV moves; it now plays

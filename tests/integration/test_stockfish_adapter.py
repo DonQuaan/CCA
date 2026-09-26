@@ -127,3 +127,34 @@ def test_sf19_win_rate_model_properties() -> None:
             1 - sf19_expected_score(150, material)
         )
     assert sf19_expected_score(100_000, 58) == pytest.approx(1.0)
+
+
+@pytest.mark.engine
+@pytest.mark.skipif(
+    not os.environ.get("CCA_STOCKFISH"), reason="set CCA_STOCKFISH to a real Stockfish"
+)
+def test_win_rate_model_matches_the_real_engine_wdl() -> None:
+    """Oracle = Stockfish itself: our cp -> expected score must reproduce its reported WDL."""
+    import random
+
+    import chess.engine
+
+    rng = random.Random(19)
+    errors: list[float] = []
+    with chess.engine.SimpleEngine.popen_uci(str(find_stockfish())) as eng:
+        eng.configure({"UCI_ShowWDL": True, "Threads": 1, "Hash": 16})
+        board = chess.Board()
+        while len(errors) < 40 and not board.is_game_over():
+            info = eng.analyse(board, chess.engine.Limit(nodes=20_000))
+            pov = info["score"].pov(board.turn)
+            cp = pov.score()
+            if cp is not None and "wdl" in info:
+                truth = info["wdl"].pov(board.turn).expectation()
+                errors.append(sf19_expected_score(cp, sf_material(board)) - truth)
+            best = info["pv"][0]
+            move = rng.choice(list(board.legal_moves)) if board.ply() % 5 == 4 else best
+            board.push(move)
+    assert len(errors) >= 20
+    # Integer cp costs up to ~0.006 per position; the per-mille WDL rounding 0.001.
+    assert max(abs(e) for e in errors) < 0.012, errors
+    assert abs(sum(errors) / len(errors)) < 0.002, errors  # no systematic bias
