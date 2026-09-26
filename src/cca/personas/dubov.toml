@@ -1,5 +1,6 @@
-# "Dubov-like": creative, provocative, high variance. Strong chaos gains.
-# Inspired by Daniil Dubov's public reputation; NOT fitted to his games.
+# "Dubov-like": provocative, high variance: large gains on the knobs the chaos driver moves.
+# A design choice inspired by Daniil Dubov's public reputation; NOT fitted to his games and not
+# a model of his thinking.
 name = "dubov"
 w0 = 0.60
 g_w = 1.2

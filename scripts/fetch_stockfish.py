@@ -44,7 +44,9 @@ def _request(url: str) -> urllib.request.Request:
         raise SystemExit(f"refusing non-GitHub URL: {url}")
     headers = {"User-Agent": "cca-fetch-stockfish", "Accept": "application/vnd.github+json"}
     token = os.environ.get("GITHUB_TOKEN")
-    if token:
+    # Only the API needs the token; release downloads redirect to other hosts and urllib
+    # would forward the Authorization header there.
+    if token and url.startswith("https://api.github.com/"):
         headers["Authorization"] = f"Bearer {token}"
     return urllib.request.Request(url, headers=headers)  # noqa: S310 - prefix checked above
 
@@ -149,7 +151,10 @@ def main() -> int:
     for b in binaries:
         print(f"binary: {b}")
     lock[f"{args.tag}/{name}"] = expected
-    LOCK.write_text(json.dumps(lock, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # newline="\n": the lock is committed; Windows text mode would otherwise write CRLF.
+    LOCK.write_text(
+        json.dumps(lock, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
     print("next: set CCA_STOCKFISH to the binary above, then run `cca doctor`")
     return 0
 

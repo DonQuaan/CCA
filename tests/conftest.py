@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import io
 import math
-from collections.abc import Sequence
+import stat
+import sys
+from collections.abc import Iterator, Sequence
+from pathlib import Path
 
 import chess
 import pytest
 
 from cca.core.rng import derive_seed
 from cca.core.types import MoveEval
+from cca.uci.protocol import UciServer
 
 _VALUES = {
     chess.PAWN: 1,
@@ -34,15 +39,30 @@ def _q_after(board: chess.Board, move: chess.Move, perspective: chess.Color) -> 
         return 1.0 if after.turn != perspective else 0.0
     if after.is_game_over(claim_draw=False):
         return 0.5
-    # one-ply greedy opponent reply: material after the opponent's best capture
-    worst = material(after, perspective)
-    for reply in after.legal_moves:
-        if after.is_capture(reply):
-            nxt = after.copy(stack=False)
-            nxt.push(reply)
-            worst = min(worst, material(nxt, perspective))
+    value = _capture_search(after, perspective, depth=2)
     jitter = (derive_seed(after.fen(), "jit") % 1000) / 1e5  # deterministic tie-breaking
-    return 1.0 / (1.0 + math.exp(-0.5 * worst)) * 0.98 + jitter
+    return 1.0 / (1.0 + math.exp(-0.5 * value)) * 0.98 + jitter
+
+
+def _capture_search(board: chess.Board, perspective: chess.Color, depth: int) -> int:
+    """Material from ``perspective`` after a capture/recapture minimax (stand-pat allowed).
+
+    The side to move maximises *its own* material, so the fixture is perspective-consistent
+    whether the next mover is the agent or its opponent.
+    """
+    stand = material(board, perspective)
+    if depth == 0:
+        return stand
+    maximise = board.turn == perspective
+    best = stand
+    for reply in board.legal_moves:
+        if not board.is_capture(reply):
+            continue
+        nxt = board.copy(stack=False)
+        nxt.push(reply)
+        v = _capture_search(nxt, perspective, depth - 1)
+        best = max(best, v) if maximise else min(best, v)
+    return best
 
 
 class FakeEngine:
@@ -51,6 +71,7 @@ class FakeEngine:
     def __init__(self) -> None:
         self.calls = 0
         self.new_games = 0
+        self.boards: list[chess.Board] = []
 
     def evaluate(
         self,
@@ -59,8 +80,11 @@ class FakeEngine:
         perspective: chess.Color,
         moves: Sequence[chess.Move] | None = None,
         multipv: int = 1,
+        time_limit: float | None = None,
     ) -> list[MoveEval]:
+        del time_limit
         self.calls += 1
+        self.boards.append(board.copy())
         pool = list(moves) if moves else list(board.legal_moves)
         evals = []
         for m in pool:
@@ -116,3 +140,32 @@ def fake_engine() -> FakeEngine:
 @pytest.fixture
 def fake_human() -> FakeHuman:
     return FakeHuman()
+
+
+FAKE_UCI = Path(__file__).resolve().parent / "fixtures" / "fake_uci_engine.py"
+
+
+def make_launcher(tmp_path: Path, no_wdl: bool = False) -> Path:
+    """An executable wrapper so the fake UCI engine can be started like a binary."""
+    if sys.platform == "win32":
+        path = tmp_path / "fakefish.bat"
+        env = "set FAKE_UCI_NO_WDL=1\n" if no_wdl else ""
+        path.write_text(f'@echo off\n{env}"{sys.executable}" "{FAKE_UCI}"\n', encoding="utf-8")
+    else:
+        path = tmp_path / "fakefish"
+        exp = "export FAKE_UCI_NO_WDL=1\n" if no_wdl else ""
+        path.write_text(f'#!/bin/sh\n{exp}exec "{sys.executable}" "{FAKE_UCI}"\n', encoding="utf-8")
+        path.chmod(path.stat().st_mode | stat.S_IEXEC)
+    return path
+
+
+@pytest.fixture
+def uci(tmp_path: Path) -> Iterator[tuple[UciServer, io.StringIO]]:
+    """A hermetic UCI server: fake engine, QRE human model, always shut down."""
+    out = io.StringIO()
+    server = UciServer(stdin=io.StringIO(""), stdout=out)
+    server.handle(f"setoption name StockfishPath value {make_launcher(tmp_path)}")
+    server.handle("setoption name CCA_HumanModel value qre")
+    server.handle("setoption name CCA_Nodes value 1000")
+    yield server, out
+    server._shutdown()

@@ -21,9 +21,10 @@ follows the stress-to-habit shift (Schwabe & Wolf 2009). Their direction is a *h
 acute stress has also been reported to improve set-shifting (Gabrys et al. 2019).
 
 Risk signs follow field data where it exists: less clock time -> more risk-averse moves
-(``c_clock``), and more risk after one's own mistakes (``d_tilt`` on negative drive), both
-reported for FIDE World Cup games by Carow & Witzig (2025, JEBO). ``p`` is the agent's own
-bounded clock pressure.
+(``c_clock``; Carow & Witzig 2025, JEBO). ``d_tilt`` raises risk after *negative surprises*
+(negative drive = outcomes worse than the agent predicted, whoever caused them); it is only a
+loose proxy for the same paper's "more risk after one's own mistakes" and is tested as such
+(prediction P3). ``p`` is the agent's own bounded clock pressure.
 
 ``losing`` in ``[0, 1]`` makes the agent risk-seeking when behind (prospect-theory style
 risk seeking in the loss domain); ``dElo = elo_self - elo_oppo`` implements contempt: the

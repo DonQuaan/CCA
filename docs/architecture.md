@@ -50,9 +50,9 @@ flowchart TB
 | 3 Affect | `neuro.update_on_opponent_move` | Exact discretisation of `Ċ = I − γ(C − C₀)`; bounded clock pressure `exp(−budget/T_ref)`; drive = leaky RPE integrator. |
 | 4 Chaos | `LorenzOscillator.advance_ply(kick)` | RPE kicks `x`, surprise kicks `y` (quantised, capped); 40 RK4 steps. |
 | 5 Candidates | `_candidate_moves` | Stockfish top-K ∪ human-prior top-M (tempered in the first 10 plies, where Maia-2 was not trained). |
-| 6 Look-ahead | `_lookahead` | Opponent's human reply distribution; Stockfish value of its top replies + the refutation; unevaluated mass assumed to be the opponent's best reply (conservative). |
+| 6 Look-ahead | `_human_lookahead` / `_lookahead` | Opponent's human reply distributions (one batched model call); Stockfish value of their top replies + the refutation; unevaluated mass valued as the opponent's best reply (conservative); children that end the game — including threefold repetition and the fifty-move rule — keep the root value and are not modelled. |
 | 7 Knobs | `knobs_from_state` | Monotone, bounded maps from state and chaos to the decision knobs (persona gains). |
-| 8 Decide | `safe_set` → `utility` → `pikl_policy` | Only moves within `ε` of the engine's best survive; closed-form KL-regularised policy anchored on the (attention-masked, habit-sharpened) prior; deterministic sampling. |
+| 8 Decide | `safe_set` → `utility` → `pikl_policy` | Only moves within `ε` of the engine's best survive, with `ε` capped by the risk bank (base allowance + gifts measured like-for-like inside one restricted search − risk already taken; a negative balance shrinks it); closed-form KL-regularised policy anchored on the (attention-masked, habit-sharpened) prior; deterministic sampling. |
 | 9 ToM | `update_opponent_model` | How surprising the agent's move is for the opponent → opponent stress → next move's `T_opp`. |
 | 10 Time | `ThinkTimeModel.sample` | Human-like think time, clock-bounded. |
 
@@ -65,14 +65,19 @@ MultiPV search per candidate (node-limited), and `1 + N_candidates` human-model 
 * **Never a random blunder:** every chosen move satisfies `q_opt ≥ max q_opt − ε`, with
   `ε ≤ eps_max` of the persona (e.g. 0.15 expected score for `balanced`). Stockfish's search
   depth bounds how well `q_opt` is known.
-* **Reproducible:** with a fixed seed, `threads=1` and a node limit, a game replays exactly on
-  the same platform. The chaos trajectory is bit-identical across platforms; the decision path
-  also uses `exp/log` (libm), so cross-platform replay can in principle differ by one move at a
-  last-ulp sampling boundary.
+* **Reproducible:** with a fixed seed, `threads=1`, a node limit and no deadline, a game
+  replays exactly on the same platform. The chaos trajectory and RNG are pinned by golden
+  digests checked on Linux and Windows CI; the decision path also uses `exp/log` (libm), so
+  cross-platform replay can in principle differ by one move at a last-ulp sampling boundary.
+* **Never loses on time by computing:** in real-time play the UCI server passes a deadline and
+  `stop`; engine calls get time slices, the look-ahead is cut when time runs out (remaining
+  candidates keep `q_human = q_opt`), and below `fast_budget` the agent plays the engine's best
+  move (*reflex* mode). This path is not reproducible by design.
 * **Human-like ≠ unpredictable (a real tension):** anchoring on Maia-2 makes the agent's moves
   more likely under a human-move predictor. Unpredictability comes from the chaos-modulated
-  `λ_KL`, regime switches of the attractor and sampling; both properties are measured
-  (`mean_log_likelihood` vs policy entropy) rather than assumed.
+  `λ_KL`, regime switches of the attractor and sampling. `cca match` reports both sides of the
+  tension — `subject_human_mean_logp`, `subject_engine_agreement`, `subject_mean_policy_entropy`
+  — so they are measured rather than assumed.
 
 ## Layering (ports & adapters)
 

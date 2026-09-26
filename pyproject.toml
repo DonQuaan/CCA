@@ -118,12 +118,17 @@ markers = [
   "slow: long-running numerical checks",
 ]
 xfail_strict = true
-filterwarnings = ["error"]
+filterwarnings = [
+  "error",
+  # maia2 -> gdown -> BeautifulSoup 4.13+ deprecation, not ours; everything else stays an error
+  "ignore:Call to deprecated method findChildren:DeprecationWarning",
+]
 
 [tool.coverage.run]
 branch = true
 source = ["cca"]
-# Needs torch + Maia-2 weights (267 MB); exercised by `pytest -m maia2` on a machine that has them.
+# Needs torch + Maia-2 weights (267 MB): tests/integration/test_maia2.py, run with `-m maia2` in
+# a Python <= 3.12 environment that has the extra (not part of the default coverage run).
 omit = ["*/cca/engines/maia2_human.py"]
 
 [tool.coverage.report]

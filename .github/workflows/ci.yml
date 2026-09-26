@@ -13,6 +13,7 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Third-party actions are pinned to commit SHAs (tags are mutable); Dependabot bumps them.
 jobs:
   quality:
     name: lint + types + tests (${{ matrix.os }}, py${{ matrix.python }})
@@ -23,22 +24,34 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
+      # Includes the golden-value tests: the same digests must come out on every OS/Python.
       - run: uv run pytest -m "not engine and not maia2" --cov=cca --cov-report=xml
+
+  hygiene:
+    name: pre-commit hygiene hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --frozen
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
 
   stockfish:
     name: integration with real Stockfish 19
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           python-version: "3.13"
       - run: uv sync --frozen
@@ -52,11 +65,13 @@ jobs:
           uv run pytest -m engine -v
 
   audit:
-    name: dependency audit
+    name: dependency audit (all extras and groups)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: "3.12" # the maia2 extra (torch, ...) only resolves below 3.13
       - run: uv sync --frozen
-      - run: uv export --frozen --no-dev --no-hashes -o requirements-audit.txt
-      - run: uv run pip-audit -r requirements-audit.txt --strict
+      - run: uv export --frozen --all-extras --all-groups --no-emit-project --no-hashes -o requirements-audit.txt
+      - run: uv run pip-audit -r requirements-audit.txt --strict --disable-pip

@@ -119,13 +119,27 @@ def test_bank_accounting_gift_minus_risk() -> None:
     bank_after_first = agent._bank
     assert bank_after_first <= 0.0  # only risk has been taken so far
     assert agent._expect is not None
-    # Pretend our move's worst case was 0.3 lower than what the opponent now allows:
-    # the difference is a gift and must be credited.
-    agent._expect = dataclasses.replace(agent._expect, q_opt=agent._expect.q_opt - 0.3)
     board.push_uci(d1.move)
+    reply = next(iter(board.legal_moves)).uci()
+    # Like-for-like gift: the reply played is 0.3 worse for the opponent than their best
+    # evaluated reply in the same restricted search -> +0.3 is credited.
+    agent._expect = dataclasses.replace(agent._expect, reply_scores={reply: 0.8, "zzzz": 0.5})
+    board.push_uci(reply)
+    d2 = agent.choose(board)
+    assert d2.trace["gift"] == pytest.approx(0.3)
+    assert agent._bank >= bank_after_first + 0.3 - 0.2  # minus at most the risk taken in d2
+
+
+def test_unevaluated_reply_gift_needs_to_clear_the_dead_zone() -> None:
+    agent = CAIMEAgent(FakeEngine(), FakeHuman(), AgentConfig(sample=False))
+    board = chess.Board()
+    d1 = agent.choose(board)
+    assert agent._expect is not None
+    board.push_uci(d1.move)
+    # No reply evaluated and a worst case equal to what we see now: pure noise, no credit.
+    agent._expect = dataclasses.replace(agent._expect, reply_scores={}, q_opt=1.0)
     board.push(next(iter(board.legal_moves)))
-    agent.choose(board)
-    assert agent._bank > bank_after_first + 0.2
+    assert agent.choose(board).trace["gift"] == 0.0
 
 
 def test_ood_clock_damps_exploitation() -> None:

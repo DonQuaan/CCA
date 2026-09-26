@@ -59,6 +59,7 @@ class CCAPlayer:
         d = self.agent.choose(board, clock)
         diag = dict(d.trace)
         diag.update(stress=d.state.stress, drive=d.state.drive, opp_stress=d.state.opp_stress)
+        diag.update(lam=d.knobs.kl_weight, omega=d.knobs.exploit, eps=d.knobs.risk_budget)
         return d.move, d.think_time, diag
 
 
@@ -99,7 +100,12 @@ class HumanModelPlayer:
 
 
 class EnginePlayer:
-    """Plays the engine's best move (configure strength limits on the engine itself)."""
+    """Plays the engine's own ``bestmove`` (configure strength limits on the engine itself).
+
+    Uses ``engine.bestmove`` when the engine offers it, because a strength-limited Stockfish
+    only applies ``UCI_LimitStrength`` / ``Skill Level`` to its final ``bestmove``: the PV lines
+    of an analysis still show full-strength play.
+    """
 
     def __init__(self, engine: SearchEngine, name: str = "Engine", think: float = 1.0) -> None:
         self.engine = engine
@@ -114,6 +120,9 @@ class EnginePlayer:
     def play(self, board: chess.Board, clock: Clock) -> tuple[str, float, dict[str, float]]:
         """Best move."""
         del clock
+        bestmove = getattr(self.engine, "bestmove", None)
+        if callable(bestmove):
+            return str(bestmove(board)), self.think, {}
         best = self.engine.evaluate(board, perspective=board.turn, multipv=1)
         return best[0].uci, self.think, {}
 
@@ -232,10 +241,29 @@ def to_pgn(record: GameRecord) -> str:
 
 
 def summarize(records: list[GameRecord], subject: str) -> dict[str, object]:
-    """Score and error profiles of ``subject`` and of its opponents."""
+    """Score, error profiles, and human-likeness / predictability of ``subject``.
+
+    ``subject_engine_agreement`` is the share of the subject's refereed moves equal to the
+    referee's best move; ``subject_human_mean_logp`` the mean ``ln p`` of its moves under the
+    human model at its nominal rating (higher = more human-like); ``subject_mean_policy_entropy``
+    its own mean decision entropy (higher = harder to predict).
+    """
     score = 0.0
     own: list[float] = []
     opp: list[float] = []
+    agree: list[int] = []
+    logps: list[float] = []
+    entropies: list[float] = []
+    for r in records:
+        for p in r.plies:
+            if p.mover != subject:
+                continue
+            if p.best is not None:
+                agree.append(1 if p.best == p.move else 0)
+            if "human_logp" in p.diag:
+                logps.append(p.diag["human_logp"])
+            if "policy_entropy" in p.diag:
+                entropies.append(p.diag["policy_entropy"])
     for r in records:
         if r.result == "1/2-1/2":
             score += 0.5
@@ -255,6 +283,10 @@ def summarize(records: list[GameRecord], subject: str) -> dict[str, object]:
         "subject_errors": asdict(own_p),
         "opponent_errors": asdict(opp_p),
         "opponent_blunder_rate_ci95": wilson_interval(blunders, opp_p.moves),
+        "subject_engine_agreement": (sum(agree) / len(agree)) if agree else None,
+        "subject_engine_agreement_ci95": wilson_interval(sum(agree), len(agree)),
+        "subject_human_mean_logp": (sum(logps) / len(logps)) if logps else None,
+        "subject_mean_policy_entropy": (sum(entropies) / len(entropies)) if entropies else None,
     }
 
 

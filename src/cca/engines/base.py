@@ -28,11 +28,14 @@ class SearchEngine(Protocol):
         perspective: chess.Color,
         moves: Sequence[chess.Move] | None = None,
         multipv: int = 1,
+        time_limit: float | None = None,
     ) -> list[MoveEval]:
         """Evaluate root moves of ``board`` (all moves, or only ``moves``).
 
         Returns up to ``multipv`` :class:`MoveEval` whose ``q`` is the expected score of
-        ``perspective`` after the move, best first.
+        ``perspective`` after the move, best first. ``time_limit`` (seconds) additionally
+        bounds this call in real-time play; ``None`` keeps the engine's own (reproducible)
+        limit.
         """
         ...
 

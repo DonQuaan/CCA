@@ -58,12 +58,16 @@ class ThinkTimeModel:
         if not 0.0 <= self._p.phi < 1.0:
             raise ValueError("phi must be in [0, 1)")
         self._rng = DeterministicRng("think-time", *seed_parts)
-        self._e = 0.0
+        self._e = self._rng.normal()  # stationary start: E[noise] = 1 from the first move
 
     def moves_left(self, move_number: int) -> float:
         """Heuristic expected number of moves still to play."""
         p = self._p
         return max(p.moves_left_min, p.moves_left_a - p.moves_left_b * move_number)
+
+    def horizon(self, move_number: int, moves_to_go: int | None = None) -> float:
+        """Moves the clock must last for: UCI ``movestogo`` when given, else the heuristic."""
+        return float(moves_to_go) if moves_to_go else self.moves_left(move_number)
 
     def phase(self, move_number: int) -> float:
         """Inverted-U phase factor in ``[phase_floor, 1]``."""
@@ -88,7 +92,7 @@ class ThinkTimeModel:
         self._e = p.phi * self._e + math.sqrt(1.0 - p.phi * p.phi) * xi
         noise = math.exp(p.sigma * self._e - 0.5 * p.sigma * p.sigma)
 
-        left = float(moves_to_go) if moves_to_go else self.moves_left(move_number)
+        left = self.horizon(move_number, moves_to_go)
         if remaining is None:
             budget = p.untimed_budget
         else:

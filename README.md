@@ -11,8 +11,8 @@ CCA sits on top of **Stockfish 19** (spoken to over UCI, never embedded) and **M
 * **human-like** — anchored on Maia-2 at the agent's own rating (KL-regularised, piKL);
 * **opponent-aware** — it looks one reply ahead with Maia-2 at the *opponent's* rating and
   prefers moves after which that opponent is likely to go wrong ("trap value");
-* **temperamental but reproducible** — latent stress / drive dynamics and a forced Lorenz
-  attractor move its knobs from move to move; every game replays exactly from its seed.
+* **variable but reproducible** — latent stress / drive variables and a forced Lorenz
+  attractor move its knobs from move to move; a node-limited game replays exactly from its seed.
 
 > ⚠️ **Research status (v0.1.0).** The architecture is implemented and tested; its
 > *behavioural* claims are **hypotheses** with pre-registered kill criteria
@@ -69,8 +69,10 @@ unfitted parameters — it cannot represent systematic human blind spots).
 # one decision, as JSON (move, policy, knobs, latent state, candidates, diagnostics)
 uv run cca analyse "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3" --human qre --persona tal
 
-# benchmark on a virtual clock against a simulated human opponent (writes PGN + JSONL + summary)
-uv run cca match --opponent human --elo-oppo 1500 --games 10 --out runs/tal-vs-1500
+# benchmark on a virtual clock against a simulated human opponent (writes PGN + JSONL + summary
+# with score, error profiles, engine agreement, human likelihood and policy entropy);
+# add --human qre if Maia-2 is not installed (the CLI also falls back with a warning)
+uv run cca match --persona tal --opponent human --elo-oppo 1500 --games 10 --out runs/tal-vs-1500
 
 # run as a UCI engine (Arena, cutechess-cli, lichess-bot, ...)
 uv run cca uci
@@ -83,10 +85,16 @@ public reputations and are **not fitted** to those players). UCI options include
 
 ## Reproducibility
 
-`--threads 1` + a node limit + a fixed `--seed` replays a game exactly; `cca match` stores the
-full manifest (versions, commit, engine id, config, seed) in `summary.json`. For online play
-leave `CCA_Seed` empty: the UCI server then uses a secret random seed and publishes only a
-SHA-256 commitment, so opponents cannot replay the agent's temperament.
+`--threads 1` + a node limit + a fixed `--seed` replays a game exactly on the same machine;
+`cca match` stores the manifest (versions, commit, engine id, every CLI argument, config, seed,
+and whether the run is reproducible) in `summary.json`. The chaos integrator and RNG are pinned
+by golden-value tests that CI runs on Linux and Windows. Real-time play (a UCI clock, `stop`)
+is *not* reproducible by design: it trades determinism for never losing on time.
+
+For online play leave `CCA_Seed` empty: the UCI server draws a fresh secret seed per game,
+prints its full SHA-256 commitment before the first move and reveals the seed when the game
+ends (`ucinewgame` / `quit`), so opponents cannot replay the agent's variability during the
+game but anyone can audit it afterwards.
 
 ## Fair play and ethics
 

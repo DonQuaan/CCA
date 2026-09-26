@@ -17,6 +17,7 @@ import contextlib
 import math
 import os
 import shutil
+import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -33,15 +34,29 @@ class EngineNotFoundError(FileNotFoundError):
     """Raised when no Stockfish binary can be located."""
 
 
+# Where scripts/fetch_stockfish.py installs engines in a source checkout. Deliberately *not*
+# the current working directory: a GUI may start `cca uci` from any folder, and running
+# whatever binary happens to sit in ./engines there would be an easy way to hijack CCA.
+PROJECT_ENGINES = Path(__file__).resolve().parents[3] / "engines"
+
+
 def find_stockfish(explicit: str | Path | None = None) -> Path:
-    """Locate a Stockfish binary: explicit path, ``$CCA_STOCKFISH``, ``./engines``, ``PATH``."""
+    """Locate Stockfish: explicit path, ``$CCA_STOCKFISH``, the project ``engines/``, ``PATH``.
+
+    An explicit path (or ``$CCA_STOCKFISH``) that does not exist is an error — silently falling
+    back to another binary would make results depend on whatever else is installed.
+    """
+    for label, value in (
+        ("explicit path", explicit),
+        ("CCA_STOCKFISH", os.environ.get("CCA_STOCKFISH")),
+    ):
+        if value:
+            path = Path(value)
+            if not path.is_file():
+                raise EngineNotFoundError(f"{label} {path} is not a file")
+            return path
     candidates: list[Path] = []
-    if explicit:
-        candidates.append(Path(explicit))
-    env = os.environ.get("CCA_STOCKFISH")
-    if env:
-        candidates.append(Path(env))
-    engines_dir = Path.cwd() / "engines"
+    engines_dir = PROJECT_ENGINES
     if engines_dir.is_dir():
         pattern = "stockfish-*.exe" if os.name == "nt" else "stockfish-*"
         candidates.extend(
@@ -115,6 +130,13 @@ def info_to_q(
     return sf19_expected_score(cp, sf_material(board))
 
 
+def _quit_engine(engine: chess.engine.SimpleEngine) -> None:
+    with contextlib.suppress(chess.engine.EngineError, OSError, RuntimeError):
+        engine.quit()
+    with contextlib.suppress(Exception):
+        engine.close()
+
+
 class StockfishEngine:
     """:class:`cca.engines.base.SearchEngine` backed by a Stockfish process."""
 
@@ -134,6 +156,9 @@ class StockfishEngine:
         self.path = find_stockfish(path)
         # popen_uci takes an argument list (no shell): the path is never shell-interpreted.
         self._engine = chess.engine.SimpleEngine.popen_uci([str(self.path)])
+        # Close the process even if the owner forgets (exceptions, abandoned objects, exit):
+        # an unclosed python-chess engine keeps a background thread alive and blocks shutdown.
+        self._finalizer = weakref.finalize(self, _quit_engine, self._engine)
         config: dict[str, str | int | bool] = {"Threads": threads, "Hash": hash_mb}
         if "UCI_ShowWDL" in self._engine.options:
             config["UCI_ShowWDL"] = True
@@ -159,6 +184,7 @@ class StockfishEngine:
         perspective: chess.Color,
         moves: Sequence[chess.Move] | None = None,
         multipv: int = 1,
+        time_limit: float | None = None,
     ) -> list[MoveEval]:
         """Evaluate root moves (see :class:`cca.engines.base.SearchEngine`)."""
         n_legal = board.legal_moves.count()
@@ -167,7 +193,7 @@ class StockfishEngine:
         root = list(dict.fromkeys(moves)) if moves else None
         width = max(1, min(multipv, len(root) if root else n_legal))
         infos = self._engine.analyse(
-            board, self._limit, multipv=width, root_moves=root, game=self._game
+            board, self._call_limit(time_limit), multipv=width, root_moves=root, game=self._game
         )
         out: list[MoveEval] = []
         for info in infos:
@@ -188,10 +214,31 @@ class StockfishEngine:
         out.sort(key=lambda e: e.q, reverse=True)
         return out
 
+    def bestmove(self, board: chess.Board, time_limit: float | None = None) -> str:
+        """The engine's own ``bestmove`` (honours ``UCI_LimitStrength`` / ``Skill Level``).
+
+        Unlike :meth:`evaluate`, whose PV lines always show the search's best line, this is
+        the move a strength-limited Stockfish actually plays. Stockfish seeds its skill picker
+        from the clock, so strength-limited play is not reproducible.
+        """
+        result = self._engine.play(board, self._call_limit(time_limit), game=self._game)
+        if result.move is None:
+            raise RuntimeError("engine returned no bestmove")
+        return result.move.uci()
+
+    def _call_limit(self, time_limit: float | None) -> chess.engine.Limit:
+        if time_limit is None:
+            return self._limit
+        own = self._limit.time
+        return chess.engine.Limit(
+            nodes=self._limit.nodes,
+            depth=self._limit.depth,
+            time=time_limit if own is None else min(own, time_limit),
+        )
+
     def close(self) -> None:
-        """Quit the engine process."""
-        with contextlib.suppress(chess.engine.EngineTerminatedError):
-            self._engine.quit()
+        """Quit the engine process (idempotent)."""
+        self._finalizer()
 
     def __enter__(self) -> StockfishEngine:
         return self

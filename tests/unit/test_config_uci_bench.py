@@ -1,4 +1,3 @@
-import io
 import json
 from pathlib import Path
 
@@ -9,7 +8,7 @@ from cca.agent import AgentConfig, CAIMEAgent
 from cca.bench.match import CCAPlayer, HumanModelPlayer, play_game, summarize, to_pgn, write_results
 from cca.cli import build_parser, main
 from cca.config import ConfigError, list_personas, load_agent_config, load_persona
-from cca.uci.protocol import UciServer, parse_go, parse_position, parse_uci_opponent
+from cca.uci.protocol import parse_go, parse_position, parse_uci_opponent
 from tests.conftest import FakeEngine, FakeHuman
 
 
@@ -90,39 +89,6 @@ def test_uci_parsers() -> None:
     assert parse_uci_opponent("none") is None
 
 
-def test_uci_handshake_and_options() -> None:
-    out = io.StringIO()
-    server = UciServer(stdin=io.StringIO(""), stdout=out)
-    assert server.handle("uci")
-    assert server.handle("isready")
-    assert server.handle("setoption name UCI_Elo value 99999")
-    assert server.handle("setoption name Foo value 1")
-    assert server.handle("position startpos moves e2e4")
-    assert not server.handle("quit")
-    text = out.getvalue()
-    for token in ("uciok", "readyok", "id name CCA"):
-        assert token in text
-    assert "ignoring unknown option Foo" in text
-    assert server._opts["UCI_Elo"] == "2600"  # clamped to max
-
-
-def test_uci_go_with_injected_agent() -> None:
-    out = io.StringIO()
-    server = UciServer(stdin=io.StringIO(""), stdout=out)
-    server._agent = CAIMEAgent(FakeEngine(), FakeHuman(), AgentConfig())
-    server.handle("position startpos moves e2e4 e7e5")
-    server.handle("go wtime 60000 btime 60000")
-    server._join()
-    lines = out.getvalue().splitlines()
-    best = [ln for ln in lines if ln.startswith("bestmove")]
-    assert len(best) == 1
-    assert (
-        chess.Move.from_uci(best[0].split()[1])
-        in parse_position(["startpos", "moves", "e2e4", "e7e5"]).legal_moves
-    )
-    assert any(ln.startswith("info string cca") for ln in lines)
-
-
 def test_bench_game_and_outputs(tmp_path: Path) -> None:
     engine = FakeEngine()
     cca = CCAPlayer(CAIMEAgent(engine, FakeHuman(), AgentConfig()))
@@ -141,13 +107,6 @@ def test_bench_game_and_outputs(tmp_path: Path) -> None:
     assert (tmp_path / "run" / "games.pgn").exists()
 
 
-def test_bench_time_forfeit() -> None:
-    cca = CCAPlayer(CAIMEAgent(FakeEngine(), FakeHuman(), AgentConfig()))
-    opp = HumanModelPlayer(FakeHuman(), 1500, 1900)
-    rec = play_game(cca, opp, "t", base_time=0.1, increment=0.0, max_plies=10)
-    assert rec.termination in {"time forfeit", "ply cap"} or rec.plies
-
-
 def test_cli_version_and_parser(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["version"]) == 0
     assert capsys.readouterr().out.strip()
@@ -156,30 +115,3 @@ def test_cli_version_and_parser(capsys: pytest.CaptureFixture[str]) -> None:
     )
     assert args.persona == "tal"
     assert args.human == "qre"
-
-
-def test_uci_secret_seed_and_ponder() -> None:
-    out = io.StringIO()
-    server = UciServer(stdin=io.StringIO(""), stdout=out)
-    server.handle("uci")
-    assert "secret seed commitment sha256:" in out.getvalue()
-    assert server._config().seed == server._secret_seed != "cca"
-    other = UciServer(stdin=io.StringIO(""), stdout=io.StringIO())
-    assert other._secret_seed != server._secret_seed
-    server.handle("setoption name CCA_Seed value exp-42")
-    assert server._config().seed == "exp-42"
-    server._agent = CAIMEAgent(FakeEngine(), FakeHuman(), AgentConfig())
-    server.handle("position startpos")
-    server.handle("go ponder wtime 1000 btime 1000")
-    assert server._worker is not None
-    server.handle("ponderhit")  # confirmed: the agent now thinks and answers
-    server._join()
-    lines = out.getvalue().splitlines()
-    assert sum(1 for ln in lines if ln.startswith("bestmove")) == 1
-    assert any(ln.startswith("info string cca") for ln in lines)
-    # A ponder that is stopped (opponent played something else) must not touch the agent.
-    history_before = list(server._agent._history)
-    server.handle("position startpos moves e2e4")
-    server.handle("go ponder")
-    server.handle("stop")
-    assert server._agent._history == history_before

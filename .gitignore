@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv-*/
+.uv-python/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -19,8 +21,21 @@ engines/*
 !engines/stockfish.lock.json
 weights/
 *.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
 *.pb.gz
 *.onnx
+*.nnue
+*.exe
+*.dll
+*.so
+*.dylib
+*.zip
+*.tar.gz
+# Papers are copyrighted by their publishers/authors: cite them, never commit the PDFs
+*.pdf
 
 # Experiment outputs
 runs/
@@ -35,3 +50,4 @@ runs/
 # Internal agent doctrine (not part of the public project)
 CLAUDE.md
 .claude/
+.pre-commit-cache/

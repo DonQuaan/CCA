@@ -54,9 +54,13 @@ def _engine(args: argparse.Namespace, nodes: int | None = None) -> SearchEngine:
 
 def _human(args: argparse.Namespace, engine: SearchEngine) -> HumanModel:
     if args.human == "maia2":
-        from cca.engines.maia2_human import Maia2HumanModel
+        try:
+            from cca.engines.maia2_human import Maia2HumanModel
 
-        return Maia2HumanModel(model_type=args.maia2_type, device=args.device)
+            return Maia2HumanModel(model_type=args.maia2_type, device=args.device)
+        except ImportError as exc:
+            print(f"warning: {exc}; falling back to --human qre", file=sys.stderr)
+            args.human = "qre"  # recorded as such in the run manifest
     from cca.engines.qre_human import QREHumanModel
 
     return QREHumanModel(engine)
@@ -140,9 +144,12 @@ def run_manifest(
         "engine_nodes": args.nodes,
         "human_model": type(human).__name__,
         "maia2_version": human_version,
-        "opponent": args.opponent,
-        "virtual_clock": [args.base, args.inc],
+        "maia2_device": getattr(human, "device", None),
+        "arguments": {
+            k: (str(v) if isinstance(v, Path) else v) for k, v in sorted(vars(args).items())
+        },
         "config": dataclasses.asdict(cfg),
+        "reproducible": args.threads == 1 and args.opponent != "stockfish",
     }
 
 
@@ -168,13 +175,14 @@ def cmd_match(args: argparse.Namespace) -> int:
         cca = CCAPlayer(CAIMEAgent(engine, human, cfg))
         opponent: Player
         if args.opponent == "stockfish":
+            # Stockfish 19 accepts UCI_Elo in [1320, 3190] (CCRL-blitz-anchored, not human Elo).
+            sf_elo = min(3190, max(1320, args.elo_oppo))
             opp_engine = StockfishEngine(
                 args.stockfish,
                 nodes=args.nodes,
-                # Stockfish 19 accepts UCI_Elo in [1320, 3190] (CCRL-blitz-anchored, not human Elo).
-                options={"UCI_LimitStrength": True, "UCI_Elo": min(3190, max(1320, args.elo_oppo))},
+                options={"UCI_LimitStrength": True, "UCI_Elo": sf_elo},
             )
-            opponent = EnginePlayer(opp_engine, name=f"Stockfish-UCI_Elo-{args.elo_oppo}")
+            opponent = EnginePlayer(opp_engine, name=f"Stockfish-UCI_Elo-{sf_elo}")
         else:
             opponent = HumanModelPlayer(
                 human, args.elo_oppo, args.elo_self, seed=f"{args.seed}-opp"

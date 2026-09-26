@@ -105,9 +105,11 @@ class PsychState:
     """
 
     stress: float = 0.2
-    """Virtual cortisol ``C(t) >= 0``."""
+    """Latent arousal ``C(t) >= 0`` (the owner spec calls it "virtual cortisol"; it is not a
+    physiological model)."""
     drive: float = 0.0
-    """Virtual dopamine-like drive ``D(t)``: running reward-prediction error (+ confident)."""
+    """Leaky integrator of evaluation surprises (reward-prediction errors); + = things went
+    better than expected. Called "virtual dopamine" in the owner spec."""
     opp_stress: float = 0.2
     """Theory-of-mind estimate of the opponent's stress."""
     chaos: tuple[float, float, float] = (0.0, 0.0, 0.0)

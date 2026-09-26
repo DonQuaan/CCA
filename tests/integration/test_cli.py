@@ -9,7 +9,7 @@ import chess
 import pytest
 
 from cca.cli import main
-from tests.integration.test_stockfish_adapter import _launcher
+from tests.conftest import make_launcher as _launcher
 
 FEN = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"
 
@@ -75,4 +75,5 @@ def test_cli_match_writes_manifest(tmp_path: Path, capsys: pytest.CaptureFixture
 def test_cli_doctor(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["doctor", "--stockfish", str(_launcher(tmp_path))]) == 0
     assert "engine ok: FakeFish" in capsys.readouterr().out
-    assert main(["doctor", "--stockfish", str(tmp_path / "missing.exe")]) in {0, 1}
+    # An explicit path that does not exist must fail, not silently use another binary.
+    assert main(["doctor", "--stockfish", str(tmp_path / "missing.exe")]) == 1

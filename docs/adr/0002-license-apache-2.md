@@ -5,8 +5,9 @@
 ## Context
 The owner wants CCA to be 100 % open: anyone may modify and reuse it, provided they credit
 the author. Dependencies have mixed licences: Stockfish, Lc0, python-chess and Maia-1 are
-GPL-3.0, lichess-bot is AGPL-3.0, Maia-2 and pymdp are MIT, OpenSpiel is Apache-2.0, and the
-Cicero repository is mostly CC BY-NC 4.0 (non-commercial).
+GPL-3.0, lichess-bot is AGPL-3.0, Maia-2 and pymdp are MIT, OpenSpiel is Apache-2.0, Maia-3 is
+AGPL-3.0, and the Cicero repository's code is MIT except `fairdiplomacy_external/` (AGPL-3.0)
+while its model weights are CC BY-NC 4.0.
 
 ## Decision
 * CCA's own files are **Apache-2.0** (permissive, explicit attribution through `NOTICE`,
@@ -17,8 +18,10 @@ Cicero repository is mostly CC BY-NC 4.0 (non-commercial).
   one-way compatible with GPL-3.0, so a combined distribution is possible under GPL-3.0
   terms; the math core (`chaos`, `neuro`, `policy`, `timing`, `core`) imports nothing from
   GPL code so it can be reused on its own under Apache-2.0.
-* Code from non-commercial or copyleft projects is **never copied**; algorithms (piKL, QRE,
-  Active Inference) are re-implemented from the papers.
+* Code from non-commercial or copyleft projects is **never copied**, and no third-party code is
+  copied at all in v0.1; algorithms (piKL, QRE, Active Inference) are re-implemented from the
+  papers. Third-party weights are never rehosted.
+* Confirmed by the owner on 2026-09-25 after reviewing the GPL-3.0 alternative.
 
 ## Consequences
 Anyone redistributing a *bundle* that contains python-chess or Stockfish binaries must also

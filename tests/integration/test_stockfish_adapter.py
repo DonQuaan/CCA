@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import stat
-import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -21,22 +19,7 @@ from cca.engines.stockfish import (
     sf19_expected_score,
     sf_material,
 )
-
-FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "fake_uci_engine.py"
-
-
-def _launcher(tmp_path: Path, no_wdl: bool = False) -> Path:
-    """An executable wrapper so the fake engine can be started like a binary."""
-    env = "set FAKE_UCI_NO_WDL=1\n" if no_wdl else ""
-    if sys.platform == "win32":
-        path = tmp_path / "fakefish.bat"
-        path.write_text(f'@echo off\n{env}"{sys.executable}" "{FIXTURE}"\n', encoding="utf-8")
-    else:
-        path = tmp_path / "fakefish"
-        exp = "export FAKE_UCI_NO_WDL=1\n" if no_wdl else ""
-        path.write_text(f'#!/bin/sh\n{exp}exec "{sys.executable}" "{FIXTURE}"\n', encoding="utf-8")
-        path.chmod(path.stat().st_mode | stat.S_IEXEC)
-    return path
+from tests.conftest import make_launcher as _launcher
 
 
 @pytest.fixture

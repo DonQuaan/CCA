@@ -72,7 +72,11 @@ def time_pressure(
     moves_left: float,
     time_ref: float,
 ) -> float:
-    """Bounded time pressure in ``[0, 1)`` from the per-move time budget (0 if untimed)."""
+    """Bounded time pressure in ``[0, 1]`` from the per-move time budget (0 if untimed).
+
+    ``moves_left`` must be the same horizon the think-time model uses (UCI ``movestogo`` when
+    the GUI sends it); an empty clock gives exactly 1.
+    """
     if remaining is None:
         return 0.0
     budget = max(0.0, remaining + increment * moves_left) / max(1.0, moves_left)

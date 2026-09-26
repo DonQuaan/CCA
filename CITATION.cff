@@ -5,8 +5,9 @@ title: "CCA — Chaotic-Chess-Algorithm (C-AIME decision core)"
 abstract: >-
   A research layer over Stockfish and Maia-2 that plays human-like, hard-to-predict,
   opponent-aware chess: closed-form piKL anchored on a human move model, human-aware
-  look-ahead with safe exploitation, latent affect dynamics and a reproducible
-  Lorenz-63 temperament driver.
+  look-ahead with safe exploitation, latent control variables inspired by (not models of)
+  stress and reward-prediction-error findings, and a reproducible Lorenz-63 variability
+  driver with a stochastic control condition.
 authors:
   - family-names: "Nguyễn"
     given-names: "Vũ Đông Quân"

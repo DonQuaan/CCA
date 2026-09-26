@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import math
 import tomllib
 from importlib import resources
 from pathlib import Path
@@ -41,6 +42,14 @@ def _build(cls: type[T], data: dict[str, Any], where: str) -> T:
             raise ConfigError(f"{where}.{key}: expected {type(default).__name__}")
         if isinstance(default, (int, float)) and not isinstance(value, (int, float)):
             raise ConfigError(f"{where}.{key}: expected a number")
+        if (
+            isinstance(default, int)
+            and not isinstance(default, bool)
+            and not isinstance(value, int)
+        ):
+            raise ConfigError(f"{where}.{key}: expected an integer")
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ConfigError(f"{where}.{key}: must be finite")
         if isinstance(default, str) and not isinstance(value, str):
             raise ConfigError(f"{where}.{key}: expected a string")
     return cls(**data)

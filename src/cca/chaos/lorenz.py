@@ -25,7 +25,9 @@ Reproducibility
 ---------------
 Integration uses only ``+ - *`` and comparisons on Python floats (IEEE-754 binary64, correctly
 rounded, no FMA contraction in CPython; no ``**``, which calls libm ``pow``), in a fixed order,
-so trajectories are bit-identical across platforms. External inputs (surprise kicks computed
+so trajectories are expected to be bit-identical across platforms; a golden-value test run by
+CI on Linux and Windows checks this. (``signals()`` uses ``tanh`` from libm, but its output
+never feeds back into the state.) External inputs (surprise kicks computed
 from neural networks) are quantised before injection so that last-ulp differences between
 GPU/CPU inference cannot fork the trajectory except exactly at a quantisation boundary.
 """

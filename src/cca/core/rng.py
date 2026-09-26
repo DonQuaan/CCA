@@ -2,7 +2,10 @@
 
 Every stochastic choice in CCA (move sampling, think-time noise, initial conditions) flows
 through :class:`DeterministicRng`, keyed by ``(seed, stream)``. The same seed therefore
-replays the same game on any machine, which is what makes experiments auditable.
+replays the same game, which is what makes experiments auditable. Uniform draws come from
+Mersenne Twister (bit-stable by CPython's guarantee); normals use ``log/cos/sin`` from libm,
+which could in principle differ in the last bit across platforms — golden-value tests in CI
+(Linux and Windows) check that they do not.
 
 Only :meth:`random.Random.random` is used as the entropy source: CPython guarantees that it
 reproduces the same sequence for the same seed across versions (unlike ``gauss``), so the
