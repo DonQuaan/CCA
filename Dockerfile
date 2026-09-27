@@ -19,7 +19,7 @@
 # unpinned frontend image is pulled. Base images are pinned by digest and written literally in
 # FROM so that tooling (e.g. Dependabot's docker ecosystem) can bump them.
 
-FROM ghcr.io/astral-sh/uv:0.11.19@sha256:b46b03ddfcfbf8f547af7e9eaefdf8a39c8cebcba7c98858d3162bd28cf536f6 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.19@sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424 AS uv
 
 FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS base
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
