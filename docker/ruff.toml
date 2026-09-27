@@ -1,0 +1,8 @@
+# Ruff settings for docker/: exactly the project's settings, plus the test exemptions that
+# pyproject.toml grants to tests/** (its patterns are relative to the repository root, so they
+# do not reach docker/tests/**). Nothing else is relaxed.
+extend = "../pyproject.toml"
+cache-dir = "../.ruff_cache"
+
+[lint.extend-per-file-ignores]
+"tests/**" = ["S101", "D", "ANN", "PLR2004", "S311", "PLC0415", "S603"]

@@ -1,0 +1,25 @@
+# Allowlist: the build context holds only what the Dockerfile copies. Everything else stays
+# out, notably .git, .venv*, .uv-python, weights/ (Maia-2 checkpoints: not redistributable),
+# engines/* (downloaded binaries; only the SHA-256 lock goes in), runs/, .cache/, CLAUDE.md,
+# .claude/, secrets (.env*, .private/, *.pem, *.key) and editor/tool caches.
+*
+
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!NOTICE
+!THIRD_PARTY_NOTICES.md
+# hatchling selects wheel files with it, exactly as in a git checkout
+!.gitignore
+!src/
+!scripts/fetch_stockfish.py
+!engines/stockfish.lock.json
+!docker/build-constraints.txt
+!docker/torch-cpu.txt
+!docker/check_dist.py
+!docker/fetch_pinned.py
+
+# Re-exclude generated files inside the allowed directories.
+**/__pycache__
+**/*.py[cod]

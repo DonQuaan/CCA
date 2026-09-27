@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>CCA play</title>
+<link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/vendor/cm-chessboard/assets/chessboard.css">
+<link rel="stylesheet" href="/static/vendor/cm-chessboard/assets/extensions/markers/markers.css">
+<link rel="stylesheet" href="/static/vendor/cm-chessboard/assets/extensions/arrows/arrows.css">
+<link rel="stylesheet" href="/static/vendor/cm-chessboard/assets/extensions/promotion-dialog/promotion-dialog.css">
+<link rel="stylesheet" href="/static/css/app.css">
+<script type="module" src="/static/js/main.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#kbd-move" data-i18n="skip_to_move">Skip to move entry</a>
+<header class="topbar">
+  <div class="brand">
+    <img src="/static/img/favicon.svg" alt="" width="28" height="28">
+    <span class="brand-name">CCA <span class="brand-sub">play</span></span>
+  </div>
+  <div class="topbar-actions">
+    <label class="switch" title="" data-i18n-title="insight_toggle_hint">
+      <input type="checkbox" id="insight-toggle" role="switch">
+      <span class="switch-track" aria-hidden="true"></span>
+      <span data-i18n="insight_toggle">Show CCA's thinking</span>
+    </label>
+    <button type="button" class="btn btn-ghost" id="lang-btn" aria-label="Language">VI</button>
+    <button type="button" class="btn btn-ghost" id="about-btn" data-i18n="about">About</button>
+  </div>
+</header>
+
+<main class="layout" id="main">
+  <section class="board-col" aria-labelledby="board-heading">
+    <h2 id="board-heading" class="visually-hidden" data-i18n="board_heading">Chess board</h2>
+    <div class="player player-top" id="player-top">
+      <div class="player-id">
+        <span class="player-swatch" aria-hidden="true"></span>
+        <div class="player-text">
+          <span class="player-name"></span>
+          <span class="player-meta"></span>
+        </div>
+        <span class="thinking" hidden><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="thinking-text"></span></span>
+      </div>
+      <div class="clock" hidden><span class="clock-time">0:00</span></div>
+      <div class="think-bar" hidden><span></span></div>
+    </div>
+    <div class="board-frame">
+      <div id="board" class="board"></div>
+      <div class="board-overlay" id="board-overlay" hidden>
+        <div class="overlay-card">
+          <span class="spinner" aria-hidden="true"></span>
+          <p id="overlay-text"></p>
+        </div>
+      </div>
+    </div>
+    <div class="player player-bottom" id="player-bottom">
+      <div class="player-id">
+        <span class="player-swatch" aria-hidden="true"></span>
+        <div class="player-text">
+          <span class="player-name"></span>
+          <span class="player-meta"></span>
+        </div>
+        <span class="thinking" hidden><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="thinking-text"></span></span>
+      </div>
+      <div class="clock" hidden><span class="clock-time">0:00</span></div>
+      <div class="think-bar" hidden><span></span></div>
+    </div>
+    <p class="arrow-legend" id="arrow-legend" hidden>
+      <span class="legend-item"><span class="legend-swatch legend-policy"></span><span data-i18n="legend_policy">CCA policy (darker = more likely)</span></span>
+      <span class="legend-item"><span class="legend-swatch legend-engine"></span><span data-i18n="legend_engine">engine's best move</span></span>
+    </p>
+  </section>
+
+  <section class="side-col card" aria-labelledby="game-heading">
+    <h2 id="game-heading" class="card-title" data-i18n="game_heading">Game</h2>
+    <p class="status" id="status" role="status"></p>
+    <p class="hint seed-note" id="seed-note"></p>
+    <div class="review-banner" id="review-banner" hidden>
+      <span id="review-text"></span>
+      <button type="button" class="btn btn-small" id="live-btn" data-i18n="back_to_live">Back to live</button>
+    </div>
+    <div class="moves" id="moves" role="group" aria-labelledby="moves-heading">
+      <h3 id="moves-heading" class="visually-hidden" data-i18n="moves_heading">Moves</h3>
+    </div>
+    <div class="nav-row" role="group" aria-label="Move navigation" data-i18n-aria="move_nav">
+      <button type="button" class="btn btn-icon" id="nav-first" data-i18n-aria="nav_first" aria-label="First position">&#x23EE;</button>
+      <button type="button" class="btn btn-icon" id="nav-prev" data-i18n-aria="nav_prev" aria-label="Previous move">&#x25C0;</button>
+      <button type="button" class="btn btn-icon" id="nav-next" data-i18n-aria="nav_next" aria-label="Next move">&#x25B6;</button>
+      <button type="button" class="btn btn-icon" id="nav-last" data-i18n-aria="nav_last" aria-label="Current position">&#x23ED;</button>
+    </div>
+    <form class="kbd-form" id="kbd-form" autocomplete="off">
+      <label for="kbd-move" data-i18n="kbd_label">Type a move (SAN or UCI)</label>
+      <div class="kbd-row">
+        <input id="kbd-move" name="move" type="text" inputmode="text" spellcheck="false" autocapitalize="off" placeholder="e4, Nf3, O-O, e7e8q" aria-describedby="kbd-error">
+        <button type="submit" class="btn btn-primary" data-i18n="kbd_play">Play</button>
+      </div>
+      <p class="field-error" id="kbd-error" aria-live="polite"></p>
+    </form>
+    <div class="controls">
+      <button type="button" class="btn btn-primary" id="new-btn" data-i18n="new_game">New game</button>
+      <button type="button" class="btn" id="undo-btn" data-i18n="undo">Take back</button>
+      <button type="button" class="btn btn-danger" id="resign-btn" data-i18n="resign">Resign</button>
+      <button type="button" class="btn" id="flip-btn" data-i18n="flip">Flip board</button>
+      <button type="button" class="btn" id="pgn-btn" data-i18n="copy_pgn">Copy PGN</button>
+      <button type="button" class="btn" id="fen-btn" data-i18n="copy_fen">Copy FEN</button>
+      <button type="button" class="btn" id="loadfen-btn" data-i18n="load_fen">Load FEN</button>
+    </div>
+    <p class="toast" id="toast" role="alert" hidden></p>
+  </section>
+
+  <section class="insight-col card" aria-labelledby="insight-heading">
+    <div class="card-head">
+      <h2 id="insight-heading" class="card-title" data-i18n="insight_heading">CCA's thinking</h2>
+      <span class="badge" id="insight-badge"></span>
+    </div>
+    <div id="insight-hidden" class="insight-empty" hidden>
+      <p data-i18n="insight_hidden">Hidden for a fair game. Switch on "Show CCA's thinking" to see it live; it is revealed when the game ends.</p>
+    </div>
+    <div id="insight-body">
+      <div class="lab-banner" id="lab-banner" hidden>
+        <span id="lab-text"></span>
+        <button type="button" class="btn btn-small" id="lab-close" data-i18n="lab_close">Close</button>
+      </div>
+      <p class="insight-empty" id="insight-empty" data-i18n="insight_empty">CCA has not moved yet. Its reasoning for each move appears here.</p>
+      <div id="insight-content" hidden>
+        <p class="why" id="why"></p>
+        <h3 class="sub-title" data-i18n="candidates_heading">Candidates</h3>
+        <div class="table-wrap">
+          <table class="cand-table" id="cand-table">
+            <thead>
+              <tr>
+                <th scope="col" data-i18n="col_move">Move</th>
+                <th scope="col" data-i18n="col_policy" data-i18n-title="col_policy_hint">CCA %</th>
+                <th scope="col" data-i18n="col_prior" data-i18n-title="col_prior_hint">Human %</th>
+                <th scope="col" data-i18n="col_qopt" data-i18n-title="col_qopt_hint">q engine</th>
+                <th scope="col" data-i18n="col_qhuman" data-i18n-title="col_qhuman_hint">q human</th>
+                <th scope="col" data-i18n="col_trap" data-i18n-title="col_trap_hint">Trap</th>
+                <th scope="col" data-i18n="col_entropy" data-i18n-title="col_entropy_hint">Opp. H</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="grid-2">
+          <div>
+            <h3 class="sub-title" data-i18n="knobs_heading">Decision knobs</h3>
+            <dl class="kv" id="knobs"></dl>
+          </div>
+          <div>
+            <h3 class="sub-title" data-i18n="latent_heading">Latent state</h3>
+            <dl class="kv" id="latent"></dl>
+          </div>
+        </div>
+        <button type="button" class="btn btn-small" id="lab-btn" data-i18n="lab_ask">Ask CCA about the displayed position</button>
+      </div>
+      <h3 class="sub-title" data-i18n="series_heading">Over the game</h3>
+      <div class="series" id="series"></div>
+      <p class="honest" data-i18n="honest_label">Stress, drive, opponent stress and chaos are virtual, latent control signals inspired by, not models of, physiology (docs/science.md, ADR-0005). Expected scores are from CCA's side (1 = CCA wins).</p>
+      <p class="model-note" id="model-note"></p>
+    </div>
+  </section>
+</main>
+
+<div class="visually-hidden" aria-live="polite" aria-atomic="true" id="announcer"></div>
+
+<dialog id="new-dialog" aria-labelledby="new-title">
+  <form id="new-form" class="dialog-form">
+    <h2 id="new-title" data-i18n="new_game">New game</h2>
+    <fieldset class="seg">
+      <legend data-i18n="play_as">Play as</legend>
+      <label><input type="radio" name="color" value="white" checked><span data-i18n="white">White</span></label>
+      <label><input type="radio" name="color" value="black"><span data-i18n="black">Black</span></label>
+      <label><input type="radio" name="color" value="random"><span data-i18n="random">Random</span></label>
+    </fieldset>
+    <label class="field">
+      <span data-i18n="persona">CCA persona</span>
+      <select id="persona-select" name="persona"></select>
+    </label>
+    <p class="hint" id="persona-desc"></p>
+    <label class="field">
+      <span><span data-i18n="cca_elo">CCA Elo</span> <output id="elo-self-out"></output></span>
+      <input type="range" id="elo-self" name="elo_self" step="50">
+    </label>
+    <label class="field">
+      <span><span data-i18n="your_elo">Your Elo (CCA's model of you)</span> <output id="elo-oppo-out"></output></span>
+      <input type="range" id="elo-oppo" name="elo_oppo" step="50">
+    </label>
+    <fieldset class="seg" id="tc-group">
+      <legend data-i18n="time_control">Time control</legend>
+    </fieldset>
+    <label class="check">
+      <input type="checkbox" id="emulate" name="emulate">
+      <span data-i18n="emulate">Human-like thinking delay</span>
+    </label>
+    <label class="field">
+      <span data-i18n="seed">Seed (optional)</span>
+      <input type="text" id="seed" name="seed" maxlength="64" spellcheck="false" data-i18n-placeholder="seed_placeholder" placeholder="random, revealed after the game">
+    </label>
+    <label class="field">
+      <span data-i18n="start_fen">Start position (FEN, optional)</span>
+      <input type="text" id="start-fen" name="fen" maxlength="100" spellcheck="false" data-i18n-placeholder="fen_placeholder" placeholder="empty = standard start">
+    </label>
+    <p class="field-error" id="new-error" aria-live="polite"></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="new-cancel" data-i18n="cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" data-i18n="start">Start game</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="text-dialog" aria-labelledby="text-title">
+  <div class="dialog-form">
+    <h2 id="text-title"></h2>
+    <p class="hint" data-i18n="copy_manual">Copying is not available here: select the text and copy it.</p>
+    <textarea id="text-area" rows="10" readonly spellcheck="false"></textarea>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-primary" id="text-close" data-i18n="close">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="about-dialog" class="about" aria-labelledby="about-title">
+  <div class="dialog-form">
+    <h2 id="about-title" data-i18n="about_title">About CCA play</h2>
+    <p data-i18n="about_what">CCA is a research layer on top of Stockfish 19 and a human move model (Maia-2, or an engine-derived QRE model when Maia-2 is not installed). It aims for human-like, hard-to-predict moves that target an opponent's likely mistakes, while keeping the objective risk within a budget.</p>
+    <p id="about-runtime" class="hint"></p>
+    <h3 data-i18n="about_signals">What the signals mean</h3>
+    <dl class="glossary">
+      <dt>q engine (q_opt)</dt><dd data-i18n="g_qopt">CCA's expected score after the move if you answer perfectly (Stockfish).</dd>
+      <dt>q human (q_human)</dt><dd data-i18n="g_qhuman">CCA's expected score if you answer like a human of your rating (human model).</dd>
+      <dt data-i18n="g_trap_t">Trap value</dt><dd data-i18n="g_trap">q human minus q engine: how much CCA expects to gain from your likely mistakes.</dd>
+      <dt data-i18n="g_prior_t">Human %</dt><dd data-i18n="g_prior">How likely a human of CCA's rating would play the move (CCA's own anchor).</dd>
+      <dt data-i18n="g_policy_t">CCA %</dt><dd data-i18n="g_policy">The final probability CCA sampled its move from; empty = outside the risk budget.</dd>
+      <dt data-i18n="g_entropy_t">Opp. H</dt><dd data-i18n="g_entropy">Entropy (nats) of your likely replies: how many plausible choices you face.</dd>
+      <dt data-i18n="g_knobs_t">Knobs</dt><dd data-i18n="g_knobs">kl_weight (imitation strength), exploit (weight on the human-aware value), entropy_bonus, risk_budget (max expected-score sacrifice), tunnel and habit (stress effects), opp_temperature (flattened opponent model).</dd>
+      <dt data-i18n="g_bank_t">Risk bank</dt><dd data-i18n="g_bank">What the opponent has given away minus the risk CCA has already taken; it caps the risk budget.</dd>
+      <dt data-i18n="g_latent_t">Stress, drive, opponent stress, chaos</dt><dd data-i18n="g_latent">Virtual, latent control signals inspired by, not models of, physiology. Chaos u0-u2 come from the configured chaos driver (by default a deterministic Lorenz attractor; its AR(1) control condition when a config file selects it): a reproducible source of variability, not a model of temperament.</dd>
+      <dt data-i18n="g_seed_t">Seed</dt><dd data-i18n="g_seed">Fixes CCA's own random draws. A game started without a seed gets a secret one, committed to (SHA-256) when the game starts and revealed when it ends. Replaying an untimed game on this server with the same seed, settings and moves repeats CCA's decisions when the engine search and the human model are deterministic (one engine thread; every decision starts from a cleared engine). Timed games also depend on the clock.</dd>
+      <dt data-i18n="g_think_t">Think time</dt><dd data-i18n="g_think">Seconds a human-like player would spend (hand-set model, not fitted); shown as a delay only if you enable it.</dd>
+    </dl>
+    <p data-i18n="about_docs">Details and sources: docs/science.md, docs/architecture.md and docs/adr/0005-honest-science-labelling.md in the CCA source.</p>
+    <p data-i18n="about_fair">Using an engine to help a human in rated games is cheating on every platform. CCA play is for study and research.</p>
+    <h3 data-i18n="about_credits">Credits and licences</h3>
+    <ul class="credits">
+      <li><strong>cm-chessboard</strong> 8.14.2 &#8212; MIT, &#169; 2017 Stefan Haack (<a href="/static/vendor/cm-chessboard/LICENSE" target="_blank" rel="noopener">LICENSE</a>)</li>
+      <li><strong>chess.js</strong> 1.4.0 &#8212; BSD-2-Clause, &#169; 2025 Jeff Hlywa (<a href="/static/vendor/chess.js/LICENSE" target="_blank" rel="noopener">LICENSE</a>)</li>
+      <li><strong>Cburnett chess pieces</strong> &#8212; BSD-3-Clause (one option of the author's multi-licence), Colin M.L. Burnett and Wikimedia Commons contributors (<a href="/static/vendor/cburnett-commons/LICENSE.txt" target="_blank" rel="noopener">LICENSE</a>)</li>
+      <li><strong>Stockfish</strong> &#8212; GPL-3.0-or-later, runs as a separate process on the server; not part of this page.</li>
+      <li><strong>Maia-2</strong> &#8212; <span data-i18n="credit_maia">code: MIT. No licence is published for its model weights, which the maia2 package downloads from the official source. Used on the server only when installed.</span></li>
+      <li><span data-i18n="credit_own">Board markers, icons and this interface are part of CCA (Apache-2.0). Hashes of every vendored file:</span> <a href="/static/vendor/MANIFEST.json" target="_blank" rel="noopener">MANIFEST.json</a></li>
+    </ul>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-primary" id="about-close" data-i18n="close">Close</button>
+    </div>
+  </div>
+</dialog>
+</body>
+</html>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- CCA play icon: an original drawing, part of CCA (Apache-2.0). -->
+  <rect width="64" height="64" rx="14" fill="#1f3b57"/>
+  <rect x="8" y="8" width="24" height="24" fill="#8ca2ad" opacity="0.55"/>
+  <rect x="32" y="32" width="24" height="24" fill="#8ca2ad" opacity="0.55"/>
+  <circle cx="32" cy="21" r="7" fill="#f4f1ea"/>
+  <path d="M25 30h14l-2.5 5 4.5 12H23l4.5-12z" fill="#f4f1ea"/>
+  <rect x="19" y="47" width="26" height="6" rx="2" fill="#f4f1ea"/>
+  <circle cx="47" cy="17" r="4" fill="#e0913a"/>
+</svg>

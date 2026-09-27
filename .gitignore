@@ -12,8 +12,9 @@ __pycache__/
 .coverage.*
 coverage.xml
 htmlcov/
-build/
-dist/
+# Build output lives at the repo root only (vendored packages under src/ keep their dist/)
+/build/
+/dist/
 *.egg-info/
 
 # Third-party binaries & weights are DOWNLOADED, never committed (GPL / size)

@@ -1,0 +1,192 @@
+name: Image
+
+# Container images ghcr.io/donquaan/cca:<version>[-maia2] (see Dockerfile).
+# Pull requests and main: build both targets and smoke-test them, never push.
+# Tag releases: release.yml calls this workflow after its gate with push: true.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      push:
+        description: Push to ghcr.io and attest (only honoured for v* tag refs)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/donquaan/cca # the registry wants lower case; the repository is DonQuaan/CCA
+
+# Third-party actions are pinned to commit SHAs (tags are mutable); Dependabot bumps them.
+jobs:
+  smoke-unit:
+    name: smoke runner (types + unit tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run mypy --strict docker/*.py docker/tests/*.py
+      - run: uv run pytest -p no:cacheprovider docker/tests
+
+  build-test:
+    name: build + smoke (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: default
+            target: runtime
+          - variant: maia2
+            target: runtime-maia2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Package version (src/cca/__init__.py)
+        id: version
+        run: |
+          version=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); from check_release import package_version; print(package_version())')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build (loaded into the runner's docker, not pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          build-args: |
+            CCA_VERSION=${{ steps.version.outputs.version }}
+            VCS_REF=${{ github.sha }}
+          load: true
+          push: false
+          tags: cca:ci
+          cache-from: type=gha,scope=image-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.variant }}
+      - name: Smoke test (config, version, doctor, files, uci, analyse, web /healthz + page)
+        env:
+          VARIANT: ${{ matrix.variant }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: >-
+          python3 docker/smoke.py cca:ci --variant "$VARIANT"
+          --expect-version "$VERSION" --expect-revision "$GITHUB_SHA"
+
+  publish:
+    name: push + attest (${{ matrix.variant }})
+    needs: [smoke-unit, build-test]
+    if: ${{ inputs.push && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io with GITHUB_TOKEN
+      id-token: write # OIDC token for the Sigstore signing certificate of the attestation
+      attestations: write # store the attestation
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: default
+            target: runtime
+            suffix: ""
+          - variant: maia2
+            target: runtime-maia2
+            suffix: -maia2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Package version (release.yml's gate already matched it to the tag)
+        id: version
+        run: |
+          version=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); from check_release import package_version; print(package_version())')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Tags only: <version><suffix>, plus latest<suffix> unless the tag is a pre-release
+      # (latest=auto skips a/b/rc/dev/post versions). Labels come from the Dockerfile (version and
+      # revision via build-args): metadata-action's generated labels would replace each variant's
+      # description with the repository description, or with an empty string.
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: |
+            latest=auto
+            suffix=${{ matrix.suffix }},onlatest=true
+          tags: |
+            type=pep440,pattern={{version}}
+      # A release is built from scratch (no cache written by other refs), tested, then pushed.
+      - name: Build without cache
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          build-args: |
+            CCA_VERSION=${{ steps.version.outputs.version }}
+            VCS_REF=${{ github.sha }}
+          no-cache: true
+          pull: true
+          load: true
+          push: false
+          tags: cca:release
+      - name: Smoke test the release build
+        env:
+          VARIANT: ${{ matrix.variant }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: >-
+          python3 docker/smoke.py cca:release --variant "$VARIANT"
+          --expect-version "$VERSION" --expect-revision "$GITHUB_SHA"
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Same builder, same inputs: every layer comes from the build tested above. One provenance
+      # only, the signed attestation below; buildkit's own is off so the tag is a single manifest.
+      - name: Push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          build-args: |
+            CCA_VERSION=${{ steps.version.outputs.version }}
+            VCS_REF=${{ github.sha }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          provenance: false
+          sbom: false
+      - name: Pull the pushed digest and smoke-test it
+        env:
+          VARIANT: ${{ matrix.variant }}
+          VERSION: ${{ steps.version.outputs.version }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          ref="${IMAGE}@${DIGEST}"
+          docker pull "$ref"
+          python3 docker/smoke.py "$ref" --variant "$VARIANT" \
+            --expect-version "$VERSION" --expect-revision "$GITHUB_SHA"
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false # storage records need an organisation-owned repository

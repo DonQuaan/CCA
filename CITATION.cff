@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use CCA, please cite it as below, together with the works it builds on (docs/science.md)."
 type: software
-title: "CCA — Chaotic-Chess-Algorithm (C-AIME decision core)"
+title: "CCA (C-AIME decision core)"
 abstract: >-
   A research layer over Stockfish and Maia-2 that plays human-like, hard-to-predict,
   opponent-aware chess: closed-form piKL anchored on a human move model, human-aware
@@ -13,7 +13,7 @@ authors:
     given-names: "Vũ Đông Quân"
     alias: "DonQuaan"
 version: "0.1.0"
-date-released: "2026-09-26"
+date-released: "2026-09-28"
 license: Apache-2.0
 repository-code: "https://github.com/DonQuaan/CCA"
 keywords:

@@ -5,15 +5,19 @@ repos:
     hooks:
       - id: check-yaml
       - id: check-toml
+      # Fixers never touch vendored third-party files: they must stay byte-identical to upstream
+      # (SHA-256 pinned in src/cca/play/static/vendor/MANIFEST.json and re-checked by the tests).
       - id: end-of-file-fixer
+        exclude: ^src/cca/play/static/vendor/
       - id: trailing-whitespace
+        exclude: ^src/cca/play/static/vendor/
       - id: check-merge-conflict
       - id: check-added-large-files
         args: ["--maxkb=512", "--enforce-all"] # also files already in the tree (CI runs --all-files)
       - id: detect-private-key
       - id: mixed-line-ending
         args: ["--fix=lf"]
-        exclude: '\.bat$'
+        exclude: '(\.bat$|^src/cca/play/static/vendor/)'
   - repo: local
     hooks:
       - id: ruff-check

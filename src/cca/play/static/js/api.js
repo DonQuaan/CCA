@@ -1,0 +1,37 @@
+// Same-origin JSON API client for cca play - part of CCA (Apache-2.0).
+
+export class ApiError extends Error {
+  constructor(status, message, state = null) {
+    super(message)
+    this.status = status
+    this.state = state
+  }
+}
+
+async function request(method, path, body) {
+  const init = {method, headers: {Accept: "application/json"}, credentials: "same-origin", cache: "no-store"}
+  if (method === "POST") {
+    init.headers["Content-Type"] = "application/json"
+    init.body = JSON.stringify(body ?? {})
+  }
+  let response
+  try {
+    response = await fetch(path, init)
+  } catch (err) {
+    throw new ApiError(0, String(err && err.message ? err.message : err))
+  }
+  const type = response.headers.get("Content-Type") || ""
+  if (!type.startsWith("application/json")) {
+    const text = await response.text()
+    if (!response.ok) throw new ApiError(response.status, text || response.statusText)
+    return text
+  }
+  const data = await response.json()
+  if (!response.ok) throw new ApiError(response.status, data.error || response.statusText, data.state || null)
+  return data
+}
+
+export const api = {
+  get: (path) => request("GET", path),
+  post: (path, body) => request("POST", path, body)
+}

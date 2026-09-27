@@ -1,0 +1,6 @@
+# torch for the runtime-maia2 image: the CPU-only wheel (no nvidia-* / triton dependencies),
+# cp312 manylinux_2_28 x86_64, 183914597 bytes. URL and SHA-256 are the ones listed on
+# https://download.pytorch.org/whl/cpu/torch/ (checked 2026-09-27). The version must equal the
+# torch pin in uv.lock: the Dockerfile's build stage refuses to build otherwise.
+torch @ https://download-r2.pytorch.org/whl/cpu/torch-2.8.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl \
+    --hash=sha256:cb9a8ba8137ab24e36bf1742cb79a1294bd374db570f09fc15a5e1318160db4e

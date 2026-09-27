@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "cca-chess"
 dynamic = ["version"]
-description = "CCA (Chaotic-Chess-Algorithm): a research layer over Stockfish + Maia-2 that plays human-like, hard-to-predict, opponent-aware chess (C-AIME core)."
+description = "CCA: a research layer over Stockfish 19 + Maia-2 that plays human-like, hard-to-predict, opponent-aware chess (C-AIME decision core)."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
@@ -35,11 +35,16 @@ maia2 = ["maia2>=0.11,<0.12; python_version < '3.13'"]
 
 [project.scripts]
 cca = "cca.cli:main"
+# No-argument UCI launcher (= `cca uci`) for GUIs that cannot pass command-line arguments.
+cca-uci = "cca.uci.protocol:console_main"
 
 [project.urls]
 Homepage = "https://github.com/DonQuaan/CCA"
+Repository = "https://github.com/DonQuaan/CCA"
+Documentation = "https://github.com/DonQuaan/CCA/blob/main/docs/reference.md"
 Issues = "https://github.com/DonQuaan/CCA/issues"
 Changelog = "https://github.com/DonQuaan/CCA/blob/main/CHANGELOG.md"
+Releases = "https://github.com/DonQuaan/CCA/releases"
 
 [dependency-groups]
 dev = [
@@ -59,7 +64,12 @@ path = "src/cca/__init__.py"
 packages = ["src/cca"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/cca", "tests", "configs", "docs", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "CITATION.cff", "CHANGELOG.md", "README.md"]
+# Anchored ("/x"): an unanchored "docs" or "LICENSE" also matches inside .venv*/ and tool caches.
+include = [
+  "/src/cca", "/tests", "/configs", "/docs", "/scripts", "/engines/stockfish.lock.json",
+  "/LICENSE", "/NOTICE", "/THIRD_PARTY_NOTICES.md", "/CITATION.cff", "/CHANGELOG.md", "/README.md",
+  "/README.vi.md", "/SECURITY.md", "/CONTRIBUTING.md", "/CODE_OF_CONDUCT.md",
+]
 
 # ---------------------------------------------------------------- ruff
 [tool.ruff]

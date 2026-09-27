@@ -1,4 +1,4 @@
-"""Command-line interface: ``cca {uci,analyse,match,doctor,version}``."""
+"""Command-line interface: ``cca {uci,analyse,match,play,doctor,version}``."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from cca import __version__
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from cca.agent import AgentConfig
     from cca.engines.base import HumanModel, SearchEngine
@@ -64,6 +64,43 @@ def _human(args: argparse.Namespace, engine: SearchEngine) -> HumanModel:
     from cca.engines.qre_human import QREHumanModel
 
     return QREHumanModel(engine)
+
+
+def _play_human(
+    args: argparse.Namespace, engine: SearchEngine
+) -> tuple[HumanModel, str, str | None]:
+    """Human model for ``cca play``: ``(model, kind, reason Maia-2 was not used)``.
+
+    Unlike :func:`_human`, *any* Maia-2 failure (missing extra, CUDA, checkpoint, download)
+    falls back to QRE: an interactive app should start, and it reports why it fell back.
+    """
+    reason: str | None = None
+    if args.human == "maia2":
+        try:
+            from cca.engines.maia2_human import Maia2HumanModel
+
+            maia = Maia2HumanModel(model_type=args.maia2_type, device=args.device)
+        except Exception as exc:  # any failure -> QRE, reported in /api/info and the UI
+            reason = f"{type(exc).__name__}: {exc}"
+            print(f"warning: Maia-2 unavailable ({reason}); using QRE", file=sys.stderr)
+        else:
+            return maia, "maia2", None
+    from cca.engines.qre_human import QREHumanModel
+
+    return QREHumanModel(engine), "qre", reason
+
+
+def _bounded_int(lo: int, hi: int) -> Callable[[str], int]:
+    def parse(text: str) -> int:
+        try:
+            value = int(text)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"expected an integer, got {text!r}") from None
+        if not lo <= value <= hi:
+            raise argparse.ArgumentTypeError(f"must be between {lo} and {hi}")
+        return value
+
+    return parse
 
 
 def _add_common(p: argparse.ArgumentParser) -> None:
@@ -245,6 +282,39 @@ def cmd_match(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_play(args: argparse.Namespace) -> int:
+    """Serve the browser simulator until interrupted (engines warm up in the background)."""
+    from cca.engines.stockfish import EngineNotFoundError, find_stockfish
+    from cca.play.app import Engines, PlayApp, PlaySettings
+    from cca.play.server import run
+
+    def build() -> Engines:
+        engine = _engine(args)
+        try:
+            human, kind, reason = _play_human(args, engine)
+        except BaseException:
+            engine.close()  # never leak a Stockfish process
+            raise
+        return Engines(engine, human, kind, reason)
+
+    try:  # fail fast, before a port is opened
+        find_stockfish(args.stockfish)
+        settings = PlaySettings(
+            base_config=_agent_config(args),
+            requested_human=args.human,
+            nodes=args.nodes,
+            threads=args.threads,
+            hash_mb=args.hash,
+            max_sessions=args.max_sessions,
+        )
+        app = PlayApp(build, settings)  # also checks the Elo defaults against the API ranges
+    # ConfigError and a TOML syntax error are ValueErrors; an unreadable --config is an OSError.
+    except (EngineNotFoundError, ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return run(app, host=args.host, port=args.port, open_browser=not args.no_browser)
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Report the environment; exit 0 if Stockfish is usable."""
     print(f"cca {__version__} | python {platform.python_version()} | {platform.platform()}")
@@ -268,7 +338,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     """Argument parser (exposed for tests)."""
-    parser = argparse.ArgumentParser(prog="cca", description="CCA — Chaotic-Chess-Algorithm")
+    parser = argparse.ArgumentParser(
+        prog="cca", description="CCA — human-like chess engine layer (C-AIME)"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("uci", help="run as a UCI engine on stdin/stdout")
     sub.add_parser("version", help="print version")
@@ -286,6 +358,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_m.add_argument("--referee-nodes", type=int, default=1_000_000)
     p_m.add_argument("--max-plies", type=int, default=300, help="adjudicate a draw after N plies")
     p_m.add_argument("--out", default="runs/latest")
+    p_play = sub.add_parser(
+        "play",
+        help="play against CCA in the browser and watch its decision signals",
+        epilog="Games started without a seed get a fresh secret seed (SHA-256 commitment shown "
+        "during the game, seed revealed at the end); --seed seeds the position lab.",
+    )
+    p_play.add_argument("--host", default="127.0.0.1", help="address to bind (default: loopback)")
+    p_play.add_argument(
+        "--port", type=_bounded_int(0, 65535), default=8765, help="TCP port (0 = any free port)"
+    )
+    p_play.add_argument("--no-browser", action="store_true", help="do not open a web browser")
+    p_play.add_argument(
+        "--max-sessions",
+        type=_bounded_int(1, 1024),
+        default=16,
+        help="games kept in memory (least recently used ones are dropped)",
+    )
+    _add_common(p_play)
     return parser
 
 
@@ -301,7 +391,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         uci_main()
         return 0
-    handlers = {"analyse": cmd_analyse, "match": cmd_match, "doctor": cmd_doctor}
+    handlers = {
+        "analyse": cmd_analyse,
+        "match": cmd_match,
+        "play": cmd_play,
+        "doctor": cmd_doctor,
+    }
     return handlers[args.command](args)
 
 

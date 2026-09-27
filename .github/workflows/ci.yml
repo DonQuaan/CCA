@@ -25,8 +25,10 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no job here pushes; keep the token off the disk
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --frozen
@@ -40,8 +42,10 @@ jobs:
     name: pre-commit hygiene hooks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no job here pushes; keep the token off the disk
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.13"
       - run: uv sync --frozen
@@ -51,8 +55,10 @@ jobs:
     name: integration with real Stockfish 19
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no job here pushes; keep the token off the disk
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.13"
       - run: uv sync --frozen
@@ -60,7 +66,8 @@ jobs:
         run: uv run python scripts/fetch_stockfish.py --os linux --arch x86-64
       - name: Engine tests
         run: |
-          export CCA_STOCKFISH="$(find engines -type f -name 'stockfish-linux-x86-64-universal' | head -n1)"
+          CCA_STOCKFISH="$(find engines -type f -name 'stockfish-linux-x86-64-universal' | head -n1)"
+          export CCA_STOCKFISH
           chmod +x "$CCA_STOCKFISH"
           uv run cca doctor --stockfish "$CCA_STOCKFISH"
           uv run pytest -m engine -v
@@ -69,8 +76,10 @@ jobs:
     name: dependency audit (every locked pin, all platforms/extras/groups)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no job here pushes; keep the token off the disk
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.13"
       - run: uv sync --frozen

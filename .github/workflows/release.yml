@@ -1,5 +1,6 @@
 name: Release
 
+# ci -> verify (release gate) -> image (push + attest to ghcr.io) -> publish (GitHub Release).
 on:
   push:
     tags: ["v*"]
@@ -17,10 +18,10 @@ jobs:
     needs: ci
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.13"
       - name: Tag must be annotated and its commit must be on main
@@ -31,27 +32,60 @@ jobs:
       - run: uv sync --frozen
       - name: Tag must equal package version and have a CHANGELOG entry
         run: uv run python scripts/check_release.py "${GITHUB_REF_NAME}"
-      - run: uv build
+      - name: Build sdist + wheel with the hash-pinned build backend (as the images do)
+        run: uv build --build-constraints docker/build-constraints.txt --require-hashes
+      # hatchling selects files with the root .gitignore; a rule there can drop a file the package
+      # needs at run time (as `dist/` did with the web board's chess.js). The images run the same
+      # check on their wheel.
+      - name: The wheel and the sdist hold every file under src/cca
+        run: uv run python docker/check_dist.py --package src/cca dist/*.whl dist/*.tar.gz
+      # The sdist include patterns in pyproject.toml also match inside local tool directories
+      # (a build from a working copy picked up .venv-*, .uv-python, .pre-commit-cache and
+      # Stockfish files under engines/). This checkout has none of them; keep it that way.
+      - name: The sdist holds no local tool directories, engines, weights or private files
+        shell: bash
+        run: |
+          members=$(tar -tzf dist/*.tar.gz)
+          bad=$(grep -E '^[^/]+/(.*/)?(\.venv[^/]*|\.uv-python|\.pre-commit-cache|\.cache|\.git|\.claude|weights|runs)(/|$)|^[^/]+/engines/|(^|/)CLAUDE\.md$' <<<"$members" || true)
+          if [ -n "$bad" ]; then
+            echo "::error title=sdist::the sdist contains local or private files ($(wc -l <<<"$bad") entries)"
+            head -n 20 <<<"$bad"
+            exit 1
+          fi
       - run: uv run python scripts/check_release.py "${GITHUB_REF_NAME}" --notes > RELEASE_NOTES.md
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release
           path: |
             dist/*
             RELEASE_NOTES.md
+          if-no-files-found: error
+
+  image:
+    name: container images
+    needs: verify
+    permissions:
+      contents: read
+      packages: write # push ghcr.io/donquaan/cca
+      id-token: write # Sigstore certificate for the attestation
+      attestations: write # store the attestation
+    uses: ./.github/workflows/image.yml
+    with:
+      push: true
 
   publish:
     name: GitHub release
-    needs: verify
+    needs: [verify, image]
     runs-on: ubuntu-latest
     permissions:
-      contents: write # only this job can write, and only after the gate passed
+      contents: write # only this job can write, and only after the gate and the images passed
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           body_path: RELEASE_NOTES.md
           files: dist/*
+          fail_on_unmatched_files: true
           prerelease: ${{ contains(github.ref_name, 'a') || contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') }}

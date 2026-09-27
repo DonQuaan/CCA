@@ -1,4 +1,4 @@
-"""CCA — Chaotic-Chess-Algorithm.
+"""CCA — human-like, hard-to-predict chess on top of Stockfish 19 and Maia-2.
 
 A research layer that sits on top of a strong search engine (Stockfish, run as a separate
 UCI process) and a human move-prediction model (Maia-2) and turns their outputs into moves

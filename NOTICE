@@ -1,11 +1,24 @@
-CCA (Chaotic-Chess-Algorithm)
+CCA
 Copyright 2026 Nguyễn Vũ Đông Quân (DonQuaan)
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 If you redistribute CCA or a derivative work, you must keep this NOTICE file,
 credit the original author, and state that you changed the files you modified.
 
-CCA does not include the source code or binaries of any third-party engine or
-model. It communicates with Stockfish (GPL-3.0) as a separate UCI process and
-imports python-chess (GPL-3.0) and, optionally, Maia-2 (MIT). See
-THIRD_PARTY_NOTICES.md for what this means for redistributors.
+CCA's source code and Python packages do not include the source code or binaries
+of any third-party engine or model. It communicates with Stockfish (GPL-3.0) as a
+separate UCI process and imports python-chess (GPL-3.0) and, optionally, Maia-2
+(MIT). The web simulator includes third-party browser files (cm-chessboard, MIT;
+chess.js, BSD-2-Clause; Cburnett chess pieces, BSD-3-Clause) with their licences
+in cca/play/static/vendor/.
+
+The container images published as ghcr.io/donquaan/cca are a combined
+distribution: they also contain the Stockfish 19 binary (GPL-3.0-or-later) with
+its licence, complete source and NNUE network in /usr/local/share/doc/stockfish/,
+tini (MIT, licence in /usr/local/share/doc/tini/), python-chess (GPL-3.0-or-later)
+and, in the -maia2 images, Maia-2 (MIT) and PyTorch (BSD-3-Clause); they never
+contain the Maia-2 weights. The images are built on the python:3.12-slim base
+image, whose Debian packages (including GPL and LGPL ones) and CPython (PSF
+License 2.0) keep their own licences, as do the Python packages installed in
+/opt/cca (licence files in their *.dist-info directories where the package ships
+them). See THIRD_PARTY_NOTICES.md for what this means for redistributors.

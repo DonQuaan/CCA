@@ -4,22 +4,31 @@ Only the subset of UCI that a GUI needs to *play* is implemented: ``uci``, ``isr
 ``setoption``, ``ucinewgame``, ``position``, ``go`` (clock fields, ``movetime``,
 ``infinite``, ``ponder``), ``ponderhit``, ``stop``, ``quit``. Search runs in a worker thread
 so ``stop`` and ``isready`` are answered while thinking; ``stop`` also cuts the
-computation short (the agent checks it between engine calls).
+computation short (the agent checks it between engine calls). ``go depth/nodes/mate/
+searchmoves`` are accepted but not applied (the search budget is ``CCA_Nodes`` plus the
+clock); the engine says so in one ``info string``. Unknown ``setoption`` names are answered
+with an ``info string`` and ignored.
 
-CCA-specific options::
+Options (one-line help for each: :data:`UCI_OPTION_HELP`)::
 
     StockfishPath        string   path to the Stockfish binary (else auto-detect)
     Threads / Hash       spin     forwarded to Stockfish
     CCA_Nodes            spin     Stockfish node budget per evaluation
     UCI_Elo              spin     rating of the human the agent imitates (Maia anchor)
+    UCI_LimitStrength    check    false = ignore UCI_Elo and imitate the top of its range
     UCI_Opponent         string   standard UCI: "<title> <rating> <computer|human> <name>"
     CCA_OpponentElo      spin     fallback opponent rating
+    Move Overhead        spin     ms subtracted from every clock/movetime deadline
+    Ponder               check    support signal for go ponder / ponderhit
     CCA_Persona          combo    shipped persona
     CCA_HumanModel       combo    maia2 | qre
     CCA_Maia2Type        combo    rapid | blitz
     CCA_Device           combo    gpu | cpu
     CCA_Seed             string   master seed; empty = secret random seed (online play)
     CCA_EmulateThinkTime check    actually wait the human-like think time
+
+GUIs that cannot pass command-line arguments start the ``cca-uci`` launcher
+(:func:`console_main`), which is the same as ``cca uci``.
 """
 
 from __future__ import annotations
@@ -35,6 +44,7 @@ import threading
 import time
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, TextIO
 
 import chess
@@ -42,16 +52,19 @@ import chess.engine
 
 from cca import __version__
 from cca.agent import AgentConfig, CAIMEAgent
+from cca.cli import main as _cli_main
 from cca.config import list_personas, load_persona
 from cca.core.types import Clock
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from cca.core.types import Decision
     from cca.engines.base import HumanModel, SearchEngine
 
 _GO_FIELDS = frozenset({"wtime", "btime", "winc", "binc", "movestogo", "movetime"})
+# ``go`` limits CCA accepts but does not apply: its budget is CCA_Nodes plus the clock.
+_UNAPPLIED_GO_LIMITS = ("depth", "nodes", "mate", "searchmoves")
 
 _SPIN_LIMITS = {
     "Threads": (1, 1, 256),
@@ -59,7 +72,81 @@ _SPIN_LIMITS = {
     "CCA_Nodes": (200_000, 1_000, 100_000_000),
     "UCI_Elo": (1900, 800, 2600),
     "CCA_OpponentElo": (1500, 400, 3000),
+    "Move Overhead": (10, 0, 5000),
 }
+# check options and their defaults (UCI_LimitStrength=true keeps UCI_Elo in force by default)
+_CHECKS = {"CCA_EmulateThinkTime": "false", "Ponder": "false", "UCI_LimitStrength": "true"}
+# UCI_LimitStrength=false: UCI_Elo is ignored and CCA imitates the top of the UCI_Elo range.
+_UNLIMITED_ELO = _SPIN_LIMITS["UCI_Elo"][2]
+# Move Overhead never cuts a compute deadline closer than this (seconds) to "now".
+_MIN_BUDGET = 0.01
+
+UCI_OPTION_HELP: Mapping[str, str] = MappingProxyType(
+    {
+        "StockfishPath": (
+            "Path to the Stockfish binary; <auto> = $CCA_STOCKFISH, then <repo>/engines/"
+            "stockfish-*, then PATH."
+        ),
+        "Threads": "Stockfish search threads (1 keeps node-limited search reproducible).",
+        "Hash": "Stockfish hash table size in MB.",
+        "CCA_Nodes": (
+            "Stockfish node budget per evaluation: CCA's search budget (go depth/nodes/mate "
+            "are not applied)."
+        ),
+        "UCI_Elo": (
+            "Rating of the human player CCA imitates (human-model anchor); ignored when "
+            "UCI_LimitStrength is false."
+        ),
+        "CCA_OpponentElo": "Opponent rating used when UCI_Opponent carries no rating.",
+        "Move Overhead": (
+            "Milliseconds subtracted from every clock/movetime deadline to absorb GUI and "
+            "network lag (same name as Stockfish's option)."
+        ),
+        "UCI_Opponent": (
+            'Standard UCI "<title> <rating> <computer|human> <name>"; its rating overrides '
+            "CCA_OpponentElo."
+        ),
+        "CCA_Persona": (
+            "Shipped playing personality (base knob values and how state and chaos move them)."
+        ),
+        "CCA_HumanModel": (
+            "Human move model: maia2 (needs the maia2 extra and weights; else falls back to "
+            "qre) or qre (derived from the engine)."
+        ),
+        "CCA_Maia2Type": "Maia-2 model variant: rapid or blitz.",
+        "CCA_Device": "Maia-2 device: gpu (uses the CPU when CUDA is unavailable) or cpu.",
+        "CCA_Seed": (
+            "Master seed; <secret> = a fresh secret seed per game, SHA-256-committed at its "
+            "first move and revealed at the next ucinewgame or quit."
+        ),
+        "CCA_EmulateThinkTime": (
+            "Wait the sampled human-like think time before answering (never past the move "
+            "deadline)."
+        ),
+        "Ponder": (
+            "Signals go ponder/ponderhit support: CCA waits during go ponder and starts "
+            "thinking at ponderhit."
+        ),
+        "UCI_LimitStrength": (
+            f"true (default): imitate a player of UCI_Elo; false: ignore UCI_Elo and use "
+            f"{_UNLIMITED_ELO}, the top of the UCI_Elo range."
+        ),
+    }
+)
+"""One-line description of every option CCA advertises in its ``uci`` answer (read-only)."""
+
+
+def unapplied_go_limits(tokens: list[str]) -> list[str]:
+    """``go`` limits in ``tokens`` that CCA accepts but does not apply, in a fixed order."""
+    return [name for name in _UNAPPLIED_GO_LIMITS if name in tokens]
+
+
+def apply_move_overhead(deadline: float, now: float, overhead: float) -> float:
+    """``deadline`` moved ``overhead`` seconds earlier, never below ``now + _MIN_BUDGET``.
+
+    A deadline that is already closer than the floor is kept as it is (never extended).
+    """
+    return max(deadline - overhead, min(deadline, now + _MIN_BUDGET))
 
 
 def parse_uci_opponent(value: str) -> int | None:
@@ -202,6 +289,8 @@ _ENGINE_OPTIONS = frozenset(
 _STOCKFISH_OPTIONS = frozenset({"StockfishPath", "Threads", "Hash", "CCA_Nodes"})
 # GUIs echo advertised defaults back verbatim; these placeholders mean "unset".
 _PLACEHOLDERS = frozenset({"<auto>", "<empty>", "<secret>"})
+# Only these take placeholders; a placeholder sent to a spin/check/combo option is invalid.
+_STRING_OPTIONS = frozenset({"StockfishPath", "UCI_Opponent", "CCA_Seed"})
 
 
 class UciServer:
@@ -223,9 +312,9 @@ class UciServer:
             "CCA_Maia2Type": "rapid",
             "CCA_Device": "gpu",
             "CCA_Seed": "",
-            "CCA_EmulateThinkTime": "false",
             "UCI_Opponent": "",
         }
+        self._opts.update(_CHECKS)
         self._opts.update({k: str(v[0]) for k, v in _SPIN_LIMITS.items()})
         self._agent: CAIMEAgent | None = None
         self._engine: SearchEngine | None = None
@@ -311,13 +400,14 @@ class UciServer:
             vars_ = " ".join(f"var {c}" for c in choices)
             self.send(f"option name {name} type combo default {self._opts[name]} {vars_}")
         self.send("option name CCA_Seed type string default <secret>")
-        self.send("option name CCA_EmulateThinkTime type check default false")
+        for name, check_default in _CHECKS.items():
+            self.send(f"option name {name} type check default {check_default}")
         self.send("uciok")
 
     def _validated(self, name: str, value: str) -> str:
         """Canonical option value, or ``ValueError`` (the old value is then kept)."""
-        if value in _PLACEHOLDERS:
-            return ""
+        if value in _PLACEHOLDERS and name in _STRING_OPTIONS:
+            return ""  # a GUI echoing a string default back means "unset"
         if name in _SPIN_LIMITS:
             _, lo, hi = _SPIN_LIMITS[name]
             try:
@@ -334,7 +424,7 @@ class UciServer:
             return match
         if name == "StockfishPath" and not Path(value).is_file():
             raise ValueError(f"StockfishPath {value!r} is not a file; keeping the current engine")
-        if name == "CCA_EmulateThinkTime":
+        if name in _CHECKS:
             if value.lower() not in {"true", "false"}:
                 raise ValueError(f"option {name} must be true or false, got {value!r}")
             return value.lower()
@@ -373,6 +463,12 @@ class UciServer:
             return
         clock, movetime, infinite = parse_go(args, self._board.turn)
         ponder = "ponder" in args
+        unapplied = unapplied_go_limits(args)
+        if unapplied:
+            self.send(
+                f"info string cca does not apply go {' '.join(unapplied)}:"
+                " its search budget is CCA_Nodes plus the clock; searching normally"
+            )
         board = self._board.copy()
         self._stop.clear()
         self._ponderhit.clear()
@@ -399,7 +495,9 @@ class UciServer:
             if not infinite:
                 deadline = agent.deadline_for(board, clock, movetime)
                 if deadline is not None:  # the clock already ran while engines were (re)built
-                    deadline -= time.monotonic() - start
+                    now = time.monotonic()
+                    overhead = int(self._opts["Move Overhead"]) / 1000.0
+                    deadline = apply_move_overhead(deadline - (now - start), now, overhead)
             decision = agent.choose(board, clock, deadline=deadline, stop=self._stop)
             move = decision.move
             self._report(decision)
@@ -473,10 +571,11 @@ class UciServer:
     # ------------------------------------------------------------------ plumbing
     def _config(self) -> AgentConfig:
         opp = parse_uci_opponent(self._opts["UCI_Opponent"]) or int(self._opts["CCA_OpponentElo"])
+        limited = self._opts["UCI_LimitStrength"] == "true"
         return replace(
             AgentConfig(),
             persona=load_persona(self._opts["CCA_Persona"]),
-            elo_self=int(self._opts["UCI_Elo"]),
+            elo_self=int(self._opts["UCI_Elo"]) if limited else _UNLIMITED_ELO,
             elo_oppo=opp,
             # Once a game has committed to a seed, option changes cannot switch it mid-game.
             seed=self._game_seed
@@ -557,3 +656,13 @@ class UciServer:
 def main() -> None:
     """Entry point for ``cca uci``."""
     UciServer().serve()
+
+
+def console_main() -> int:
+    """The ``cca-uci`` launcher: exactly ``cca uci``, for GUIs that cannot pass arguments.
+
+    Runs ``cca.cli.main(["uci"])`` (UTF-8 streams included) and returns its exit code, which
+    the generated launcher exits with. Command-line arguments are ignored: lichess-bot, for
+    example, appends its ``engine_options`` as ``--key=value``.
+    """
+    return _cli_main(["uci"])

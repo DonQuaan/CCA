@@ -1,0 +1,302 @@
+{
+  "description": "Third-party files served by `cca play`. tests/unit/test_play.py re-hashes every file against this list and fails on any unlisted file.",
+  "packages": [
+    {
+      "name": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2017 Stefan Haack",
+      "homepage": "https://github.com/shaack/cm-chessboard",
+      "license_file": "cm-chessboard/LICENSE",
+      "not_vendored": [
+        "assets/pieces/*.svg (CC BY-SA 3.0 / CC BY-NC-SA 4.0 piece sprites)",
+        "assets/extensions/markers/markers.svg (its header declares CC BY-SA 3.0; replaced by CCA's own img/markers.svg)",
+        ".claude/ (author-local file shipped by accident in the npm tarball)"
+      ]
+    },
+    {
+      "name": "chess.js",
+      "version": "1.4.0",
+      "license": "BSD-2-Clause",
+      "copyright": "Copyright (c) 2025, Jeff Hlywa",
+      "homepage": "https://github.com/jhlywa/chess.js",
+      "license_file": "chess.js/LICENSE",
+      "not_vendored": [
+        "dist/esm/chess.js.map (source map; browsers only request it when developer tools are open)"
+      ]
+    },
+    {
+      "name": "cburnett-commons",
+      "version": "Wikimedia Commons revisions downloaded 2026-09-27",
+      "license": "BSD-3-Clause",
+      "copyright": "Colin M.L. Burnett (User:Cburnett), with later minor revisions by Wikimedia Commons contributors",
+      "homepage": "https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces/Standard_transparent",
+      "license_file": "cburnett-commons/LICENSE.txt",
+      "license_note": "multi-licensed on Commons ({{self|GFDL|migration=relicense|BSD|GPL}}); used under the BSD-3-Clause option"
+    }
+  ],
+  "files": [
+    {
+      "path": "cburnett-commons/LICENSE.txt",
+      "package": "cburnett-commons",
+      "version": "Wikimedia Commons revisions downloaded 2026-09-27",
+      "license": "BSD-3-Clause",
+      "source_url": null,
+      "bytes": 2178,
+      "sha256": "2d7333fc8fc03563f5433eca6ae63257febb91a1be69a76ef72e30e20ebb2642",
+      "note": "provenance note plus the BSD-3-Clause text as rendered on the Commons file pages (written for this project)"
+    },
+    {
+      "path": "cburnett-commons/cburnett.svg",
+      "package": "cburnett-commons",
+      "version": "Wikimedia Commons revisions downloaded 2026-09-27",
+      "license": "BSD-3-Clause",
+      "source_url": null,
+      "bytes": 12789,
+      "sha256": "ce5bf5a05556f58667f977539ae1b9b21b62be0632bd066334a51c14474d6599",
+      "note": "cm-chessboard sprite (ids wk..bp, 40x40 tiles) assembled from the 12 Commons files listed in derived_from; each piece is wrapped in <g transform=\"scale(0.8888889)\">, the drawing itself is unchanged; the header comment (attribution, licence choice) was written for this project and points to LICENSE.txt",
+      "derived_from": [
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg",
+          "bytes": 700,
+          "sha256": "56f55c784843b1ac272b8745d740aa2a3e6c585513ef889978916f88e5d0b70b"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg",
+          "bytes": 1087,
+          "sha256": "b72b864e2a5b6c8f8afb7f260130c10e649ff063f4ef58190c00a35c56364327"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg",
+          "bytes": 1198,
+          "sha256": "4d42ab45afd862c704eb9b35317102d453a7a6b9b71d40f18958c8eadc829e4b"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg",
+          "bytes": 1282,
+          "sha256": "1d7beace24d455c923ee80d27125963eaf0287b956c5576dbf790c97ac0b97eb"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg",
+          "bytes": 1325,
+          "sha256": "5486791207156f7ae8b8678187648df45085d726334c2862e73b077dea00641e"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg",
+          "bytes": 766,
+          "sha256": "cc7de30708dcec8f4d593a89d10893d5f9c063682039a1c441e86c44cf2096db"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg",
+          "bytes": 1456,
+          "sha256": "025eea92e0ef8eb1fd06b1c58d0d112948f08bf66cea6b5d003659569949b41c"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg",
+          "bytes": 1422,
+          "sha256": "70191a3fbc729ef629661e2419a66ab8024c49277aab8ccae3a5ef61372ab802"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg",
+          "bytes": 1818,
+          "sha256": "6abf617a9e26902e0734d85897c9ca55e29d7be2928142aa21032c38967e34ba"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg",
+          "bytes": 1282,
+          "sha256": "ba67da76ce919addc60ecb8b46801def073dd54149b2c038a2d07a16d904d5e4"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg",
+          "bytes": 1620,
+          "sha256": "735cc58315b123a56632d4877a6b976c827481fa97bf9a5c8f459ec969bc2549"
+        },
+        {
+          "source_url": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg",
+          "bytes": 766,
+          "sha256": "4413bf7c18a341f9723d97e6f92c985e30b6167b037e80842cea59b7541bb074"
+        }
+      ]
+    },
+    {
+      "path": "chess.js/LICENSE",
+      "package": "chess.js",
+      "version": "1.4.0",
+      "license": "BSD-2-Clause",
+      "source_url": "https://cdn.jsdelivr.net/npm/chess.js@1.4.0/LICENSE",
+      "bytes": 1315,
+      "sha256": "0b3a3c2b4432a26bb18f9d06f5bba4de015bcc980306b7db28b06025495e2186"
+    },
+    {
+      "path": "chess.js/dist/esm/chess.js",
+      "package": "chess.js",
+      "version": "1.4.0",
+      "license": "BSD-2-Clause",
+      "source_url": "https://cdn.jsdelivr.net/npm/chess.js@1.4.0/dist/esm/chess.js",
+      "bytes": 107052,
+      "sha256": "76c7c34f0e2e9ab076521a5d6fe786a9cce537bb1b6f29d32a9c9970b5b232d2"
+    },
+    {
+      "path": "cm-chessboard/LICENSE",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/LICENSE",
+      "bytes": 1108,
+      "sha256": "ccf51777fa25224a3548f958a35e4e8ad06db976bd7e56d39bc4baf91fc2fa8e"
+    },
+    {
+      "path": "cm-chessboard/assets/chessboard.css",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/assets/chessboard.css",
+      "bytes": 8417,
+      "sha256": "4e65b608f0f4e475fb0c8c98b4d1cc370d2ab05156448b135a9f026ef03be887"
+    },
+    {
+      "path": "cm-chessboard/assets/extensions/arrows/arrows.css",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/assets/extensions/arrows/arrows.css",
+      "bytes": 964,
+      "sha256": "f832ceb92fdfe05d83d40d061487afa55e45bcacd70295e674175e6b967d71f5"
+    },
+    {
+      "path": "cm-chessboard/assets/extensions/arrows/arrows.svg",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/assets/extensions/arrows/arrows.svg",
+      "bytes": 1700,
+      "sha256": "5b5850546dc91d6508d9dfa1fb51e2f75b4cccdb3d3436f098ff0f5829a30ba6"
+    },
+    {
+      "path": "cm-chessboard/assets/extensions/markers/markers.css",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/assets/extensions/markers/markers.css",
+      "bytes": 2010,
+      "sha256": "4b1cdb03bb8a46d2692d6d930aee2907931492d87043eaa118fb8faae8953d79"
+    },
+    {
+      "path": "cm-chessboard/assets/extensions/promotion-dialog/promotion-dialog.css",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/assets/extensions/promotion-dialog/promotion-dialog.css",
+      "bytes": 967,
+      "sha256": "fb328e9b71d2aa83f016a68a63ddb5bd41c6aae0ebc6df91a124ce429c8d2234"
+    },
+    {
+      "path": "cm-chessboard/src/Chessboard.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/Chessboard.js",
+      "bytes": 7760,
+      "sha256": "6582efba87300738ab2ac48286162900c368ed12ce069c2713946dc019f82cd0"
+    },
+    {
+      "path": "cm-chessboard/src/extensions/arrows/Arrows.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/extensions/arrows/Arrows.js",
+      "bytes": 5991,
+      "sha256": "0b2e08bbb56fd6d7a7d096ed860384164c904f7ae1fad54c0c9143116e4f0378"
+    },
+    {
+      "path": "cm-chessboard/src/extensions/markers/Markers.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/extensions/markers/Markers.js",
+      "bytes": 8496,
+      "sha256": "6ed60c5a7a8aab25debaab309049f05432539387b5ab1100878eed4d92abc177"
+    },
+    {
+      "path": "cm-chessboard/src/extensions/promotion-dialog/PromotionDialog.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/extensions/promotion-dialog/PromotionDialog.js",
+      "bytes": 17103,
+      "sha256": "2c83f010a34723a5c726630e0bad81a9b245e140d111acbaddba28e132bce2cf"
+    },
+    {
+      "path": "cm-chessboard/src/lib/Svg.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/lib/Svg.js",
+      "bytes": 1987,
+      "sha256": "bacbf9de8ee6b782e5f237204d848018d484802e9b9e77ad36df5fc6547ab754"
+    },
+    {
+      "path": "cm-chessboard/src/lib/Utils.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/lib/Utils.js",
+      "bytes": 1736,
+      "sha256": "971a1695cfc198e80a9f2dbc7ee188b3e5e82069093c1c218ce8dd8210c25597"
+    },
+    {
+      "path": "cm-chessboard/src/model/ChessboardState.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/model/ChessboardState.js",
+      "bytes": 1386,
+      "sha256": "b3d7cde7663f6b5432110015bf1bdce5ca4b4ccdd8c7bc2d49eb87fa95a14f1d"
+    },
+    {
+      "path": "cm-chessboard/src/model/Extension.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/model/Extension.js",
+      "bytes": 1968,
+      "sha256": "2657c0e59148eef29aed16e2672f6cc650ed2abcf6846838cfbb85b4bea01357"
+    },
+    {
+      "path": "cm-chessboard/src/model/Position.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/model/Position.js",
+      "bytes": 4769,
+      "sha256": "65d8bfcb879f16c3aadd6a6e5514f90e9f161ea2028cc2d46427e5b08de7677d"
+    },
+    {
+      "path": "cm-chessboard/src/view/ChessboardView.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/view/ChessboardView.js",
+      "bytes": 20948,
+      "sha256": "cdbbd0f63bd4be43c31c2b5bad118843772a19fe3c907b2e1186caf2665e19bb"
+    },
+    {
+      "path": "cm-chessboard/src/view/PositionAnimationsQueue.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/view/PositionAnimationsQueue.js",
+      "bytes": 11142,
+      "sha256": "fddb37f73ef1f8fb5f100dc461308415fdf00787c6ab839c811a8abfc5b1bbe1"
+    },
+    {
+      "path": "cm-chessboard/src/view/VisualMoveInput.js",
+      "package": "cm-chessboard",
+      "version": "8.14.2",
+      "license": "MIT",
+      "source_url": "https://cdn.jsdelivr.net/npm/cm-chessboard@8.14.2/src/view/VisualMoveInput.js",
+      "bytes": 23085,
+      "sha256": "3b028a2b82f904c7f7732213c39f680c45e7805ad0a82226a264851ea589a275"
+    }
+  ]
+}
