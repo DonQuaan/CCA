@@ -268,7 +268,9 @@ def test_move_overhead_shrinks_every_deadline(monkeypatch: pytest.MonkeyPatch, g
     for overhead_ms in (0, 400):
         seen = _spied_go(monkeypatch, overhead_ms, go)
         shrink = seen["derived"] - seen["passed"]  # overhead + the (tiny) set-up time
-        assert overhead_ms / 1000 <= shrink < overhead_ms / 1000 + 0.1
+        # -1e-9: a coarse monotonic tick (Windows, Python 3.11) can make set-up time 0 and the
+        # float difference land a hair below the overhead.
+        assert overhead_ms / 1000 - 1e-9 <= shrink < overhead_ms / 1000 + 0.1
         assert seen["held"] == seen["passed"]  # the emulated think-time clamp shrinks too
 
 

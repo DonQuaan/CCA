@@ -130,7 +130,9 @@ def test_deadline_for_movetime_and_untimed() -> None:
     board = chess.Board()
     d = agent.deadline_for(board, Clock(), 0.5)
     assert d is not None
-    assert 0.40 < d - time.monotonic() <= 0.45
+    # 1e-9: Windows' coarse monotonic tick (~15.6 ms on Python 3.11) can return the same value
+    # twice, and the float difference then lands a hair above 0.45.
+    assert 0.40 < d - time.monotonic() <= 0.45 + 1e-9
     assert agent.deadline_for(board, Clock(), None) is None
 
 

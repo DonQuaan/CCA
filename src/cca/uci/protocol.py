@@ -214,59 +214,65 @@ def parse_go(tokens: list[str], turn: chess.Color) -> tuple[Clock, float | None,
     return clock, _get("movetime"), infinite
 
 
-def _is_windows_pipe(stream: TextIO) -> bool:
-    if sys.platform != "win32":
-        return False
-    try:
-        import _winapi  # type: ignore[import-not-found,unused-ignore]  # noqa: PLC0415 - Windows-only
-        import msvcrt  # noqa: PLC0415 - Windows-only
-
-        handle = msvcrt.get_osfhandle(stream.fileno())
-        return bool(_winapi.GetFileType(handle) == _winapi.FILE_TYPE_PIPE)
-    except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
-        return False
-
-
 def _line_reader(stream: TextIO, put: Callable[[str | None], None]) -> None:
     for raw in stream:
         put(raw)
     put(None)
 
 
-def _pipe_reader(stream: TextIO, put: Callable[[str | None], None]) -> None:
-    """Read a Windows pipe without ever leaving a blocking ``ReadFile`` pending.
+# Platform split at definition time: mypy type-checks only the branch for the platform it
+# targets (so the Windows-only modules below are never checked on Linux, and vice versa).
+if sys.platform == "win32":
+    import _winapi
+    import msvcrt
 
-    With a synchronous read pending on the stdin pipe, loading native libraries in another
-    thread (``import torch``, CUDA/cuDNN on the first forward pass) deadlocks until the read
-    returns — and a GUI waiting for ``readyok`` never writes. Measured on this project: import
-    torch + CUDA matmul/conv took 1.4 s with no reader, 1.4 s with this polling reader, and hung
-    for > 90 s with a blocking reader. So: peek, and only read bytes that are already there.
-    """
-    import _winapi  # type: ignore[import-not-found,unused-ignore]  # noqa: PLC0415 - Windows-only
-    import msvcrt  # noqa: PLC0415 - Windows-only
-
-    fd = stream.fileno()
-    handle = msvcrt.get_osfhandle(fd)
-    buf = b""
-    while True:
+    def _is_windows_pipe(stream: TextIO) -> bool:
         try:
-            peeked = _winapi.PeekNamedPipe(handle, 0)
-        except OSError:  # writer closed the pipe: EOF
-            break
-        avail = int(peeked[-2])  # (avail, left) for size 0; (data, avail, left) otherwise
-        if not avail:
-            time.sleep(0.005)
-            continue
-        chunk = os.read(fd, avail)
-        if not chunk:
-            break
-        buf += chunk
-        *lines, buf = buf.split(b"\n")
-        for line in lines:
-            put(line.decode("utf-8", errors="replace").rstrip("\r") + "\n")
-    if buf:
-        put(buf.decode("utf-8", errors="replace"))
-    put(None)
+            handle = msvcrt.get_osfhandle(stream.fileno())
+            return bool(_winapi.GetFileType(handle) == _winapi.FILE_TYPE_PIPE)
+        except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
+            return False
+
+    def _pipe_reader(stream: TextIO, put: Callable[[str | None], None]) -> None:
+        """Read a Windows pipe without ever leaving a blocking ``ReadFile`` pending.
+
+        With a synchronous read pending on the stdin pipe, loading native libraries in another
+        thread (``import torch``, CUDA/cuDNN on the first forward pass) deadlocks until the read
+        returns — and a GUI waiting for ``readyok`` never writes. Measured on this project:
+        import torch + CUDA matmul/conv took 1.4 s with no reader, 1.4 s with this polling
+        reader, and hung for > 90 s with a blocking reader. So: peek, and only read bytes that
+        are already there.
+        """
+        fd = stream.fileno()
+        handle = msvcrt.get_osfhandle(fd)
+        buf = b""
+        while True:
+            try:
+                peeked = _winapi.PeekNamedPipe(handle, 0)
+            except OSError:  # writer closed the pipe: EOF
+                break
+            avail = int(peeked[-2])  # (avail, left) for size 0; (data, avail, left) otherwise
+            if not avail:
+                time.sleep(0.005)
+                continue
+            chunk = os.read(fd, avail)
+            if not chunk:
+                break
+            buf += chunk
+            *lines, buf = buf.split(b"\n")
+            for line in lines:
+                put(line.decode("utf-8", errors="replace").rstrip("\r") + "\n")
+        if buf:
+            put(buf.decode("utf-8", errors="replace"))
+        put(None)
+
+else:
+
+    def _is_windows_pipe(stream: TextIO) -> bool:
+        return False
+
+    def _pipe_reader(stream: TextIO, put: Callable[[str | None], None]) -> None:
+        raise OSError("the polling pipe reader is only used on Windows")
 
 
 _COMBOS: dict[str, tuple[str, ...]] = {
