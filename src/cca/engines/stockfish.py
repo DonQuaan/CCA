@@ -72,7 +72,8 @@ def find_stockfish(explicit: str | Path | None = None) -> Path:
         if path.is_file():
             return path
     raise EngineNotFoundError(
-        "Stockfish not found: pass a path, set CCA_STOCKFISH, or run scripts/fetch_stockfish.py"
+        "Stockfish not found: pass a path or set CCA_STOCKFISH to a Stockfish binary "
+        "(in a source checkout, scripts/fetch_stockfish.py downloads the pinned one)"
     )
 
 

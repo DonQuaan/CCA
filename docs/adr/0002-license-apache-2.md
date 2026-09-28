@@ -1,6 +1,6 @@
 # ADR-0002 — Apache-2.0 for CCA's own code; third parties at arm's length
 
-* Status: accepted · 2026-09-25 · amended before release by ADR-0006
+* Status: accepted · 2026-09-25 · amended before release by ADR-0006 · amended by ADR-0007 (container images as combined distributions, vendored web assets)
 
 ## Context
 The owner wants CCA to be 100 % open: anyone may modify and reuse it, provided they credit

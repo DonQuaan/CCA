@@ -97,7 +97,9 @@ class Maia2HumanModel:
             from maia2 import inference, model  # noqa: PLC0415 - optional extra
         except ImportError as exc:  # pragma: no cover - exercised only without the extra
             raise ImportError(
-                "Maia-2 is not installed: use Python 3.10-3.12 and `uv sync --extra maia2`"
+                "Maia-2 is not installed: it needs Python 3.10-3.12 and the maia2 extra "
+                '(pip install "cca-chess[maia2]"; in a source checkout: uv sync --extra maia2 '
+                "--python 3.12)"
             ) from exc
         if model_type not in {"rapid", "blitz"}:
             raise ValueError("model_type must be 'rapid' or 'blitz'")

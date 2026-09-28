@@ -3,8 +3,8 @@ message: "If you use CCA, please cite it as below, together with the works it bu
 type: software
 title: "CCA (C-AIME decision core)"
 abstract: >-
-  A research layer over Stockfish and Maia-2 that plays human-like, hard-to-predict,
-  opponent-aware chess: closed-form piKL anchored on a human move model, human-aware
+  A research layer over Stockfish and Maia-2 designed to play human-like, hard-to-predict,
+  opponent-aware chess (these behavioural goals are pre-registered hypotheses, not measured results): closed-form piKL anchored on a human move model, human-aware
   look-ahead with safe exploitation, latent control variables inspired by (not models of)
   stress and reward-prediction-error findings, and a reproducible Lorenz-63 variability
   driver with a stochastic control condition.

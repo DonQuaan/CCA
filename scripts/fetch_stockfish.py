@@ -160,7 +160,7 @@ def main() -> int:
     LOCK.write_text(
         json.dumps(lock, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
     )
-    print("next: set CCA_STOCKFISH to the binary above, then run `cca doctor`")
+    print("next: run `cca doctor` (a source checkout finds engines/ by itself)")
     return 0
 
 

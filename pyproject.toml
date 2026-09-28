@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "cca-chess"
 dynamic = ["version"]
-description = "CCA: a research layer over Stockfish 19 + Maia-2 that plays human-like, hard-to-predict, opponent-aware chess (C-AIME decision core)."
+description = "CCA: a research layer over Stockfish 19 + Maia-2 designed to play human-like, hard-to-predict, opponent-aware chess (C-AIME decision core; behavioural claims are hypotheses)."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
