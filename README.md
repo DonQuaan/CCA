@@ -225,7 +225,7 @@ board code; the page requests nothing from other hosts) and opens your browser. 
   green arrow. **Game card:** move list and navigation, a move field, *New game*, *Take back*,
   *Resign*, *Flip board*, *Copy PGN*, *Copy FEN*, *Load FEN*.
 - **CCA's thinking:** one sentence on why CCA chose its move; the **candidates** table with
-  *CCA %* (final policy; empty = outside the risk budget), *Human %* (human prior at CCA's
+  *CCA %* (final policy; "-" = outside the risk budget), *Human %* (human prior at CCA's
   rating), *q engine* (CCA's expected score if you reply perfectly), *q human* (if you reply like
   a human of your rating), *Trap* (q human − q engine) and *Opp. H* (entropy of your likely
   replies, nats); the **knobs** `kl_weight`, `exploit`, `entropy_bonus`, `risk_budget`, `tunnel`,
