@@ -70,6 +70,9 @@ export class BoardView {
         {class: PromotionDialog, props: {language: "en"}}
       ]
     })
+    // cm-chessboard gives its <svg> role="img" but no accessible name (axe: svg-img-alt, WCAG
+    // 1.1.1). Name it after the visually hidden, translated "Chess board" heading.
+    this.board.view.svg.setAttribute("aria-labelledby", "board-heading")
   }
 
   // Tracked here: cm-chessboard only updates its own orientation when the (rAF-driven)

@@ -86,6 +86,11 @@ are recorded in `docs/adr/0007-simulator-and-distribution.md`.
   English and Vietnamese UI; light or dark theme from the system setting. A game without a
   seed gets a secret one, SHA-256-committed during the game and revealed at the end. Any Maia-2
   failure falls back to QRE, and the UI says why. Options: `docs/reference.md` (`cca play`).
+- **`cca play`, accessibility:** audited with axe-core against WCAG 2.0/2.1/2.2 A and AA rules
+  in both themes and both languages, with the new-game dialog open and closed: 0 violations.
+  Every text colour meets 4.5:1 on every surface, the board has an accessible name, the
+  scrolling candidate table is keyboard-reachable, moves can be typed (SAN or UCI) and are
+  announced; `tests/unit/test_play_a11y.py` keeps the contrast matrix and markup in place.
 - **`cca play`, server and security:** standard-library `http.server`, no build step; the page
   loads nothing from other hosts. Binds `127.0.0.1:8765` by default (`--port 0` = any free
   port); any other address prints a warning, because there is no authentication. A `Host`
