@@ -139,3 +139,11 @@ is marked as a pre-release. The image contents and the reasons behind them are r
 - Docker Desktop was not usable on the maintainer's machine while the images were written, so
   the final Dockerfile was first built and smoke-tested by the `Image` workflow on GitHub
   (step 5): both targets were green on `main` before the tag was pushed.
+- **The one exception to "a pushed tag is never moved".** The first push of `v0.1.0` (on
+  `8626977`) was stopped by the release gate: the sdist held `engines/stockfish.lock.json`, which
+  the anchored sdist includes had added and the gate forbids. No Release, image or file was
+  published under that tag. With the maintainer's approval the tag was deleted and created again
+  on the fixed release commit, about 40 minutes after the first push. CI now dry-runs the gate's
+  package checks on every push (`release-dry-run` in `ci.yml`), so a release that passes CI no
+  longer fails the gate on packaging. Any later failure after a tag is pushed is fixed in a new
+  patch version.
