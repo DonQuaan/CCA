@@ -66,7 +66,7 @@ packages = ["src/cca"]
 [tool.hatch.build.targets.sdist]
 # Anchored ("/x"): an unanchored "docs" or "LICENSE" also matches inside .venv*/ and tool caches.
 include = [
-  "/src/cca", "/tests", "/configs", "/docs", "/scripts", "/engines/stockfish.lock.json",
+  "/src/cca", "/tests", "/configs", "/docs",
   "/LICENSE", "/NOTICE", "/THIRD_PARTY_NOTICES.md", "/CITATION.cff", "/CHANGELOG.md", "/README.md",
   "/README.vi.md", "/SECURITY.md", "/CONTRIBUTING.md", "/CODE_OF_CONDUCT.md",
 ]

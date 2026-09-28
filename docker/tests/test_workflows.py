@@ -218,3 +218,21 @@ def test_publish_tests_what_it_pushes_and_attests_the_pushed_digest() -> None:
         "push-to-registry": True,
         "create-storage-record": False,
     }
+
+
+def test_ci_dry_runs_the_release_gate_package_checks() -> None:
+    """The release gate runs only on a tag; CI must run the same package checks before tagging."""
+    dry = load("ci.yml")["jobs"]["release-dry-run"]
+    gate = load("release.yml")["jobs"]["verify"]
+    for text in (
+        "--build-constraints docker/build-constraints.txt --require-hashes",
+        "docker/check_dist.py --package src/cca dist/*.whl dist/*.tar.gz",
+        "tar -tzf dist/*.tar.gz",
+    ):
+        ours = steps(dry)[step_index(dry, text)]["run"]
+        assert ours == steps(gate)[step_index(gate, text)]["run"]
+    changelog = steps(dry)[step_index(dry, "scripts/check_release.py")]["run"]
+    assert "cca.__version__" in changelog
+    build = step_index(dry, "uv build")
+    assert build < step_index(dry, "docker/check_dist.py")
+    assert build < step_index(dry, "tar -tzf")

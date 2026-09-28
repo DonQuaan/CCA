@@ -86,3 +86,35 @@ jobs:
       # Strips markers and splits conflicting pins so nothing is skipped; accepted advisories
       # carry a written reason and an expiry date inside the script.
       - run: uv run python scripts/audit_deps.py
+
+  # The release gate (release.yml) runs only on a tag, so a packaging mistake used to surface only
+  # after tagging (v0.1.0's first gate run rejected engines/stockfish.lock.json in the sdist).
+  # This job runs the same package checks on every push and pull request.
+  release-dry-run:
+    name: release gate dry run (package build and contents)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # no job here pushes; keep the token off the disk
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.13"
+      - run: uv sync --frozen
+      - name: The package version has a CHANGELOG entry
+        shell: bash
+        run: uv run python scripts/check_release.py "v$(uv run python -c 'import cca; print(cca.__version__)')"
+      - name: Build sdist + wheel with the hash-pinned build backend (as the release does)
+        run: uv build --build-constraints docker/build-constraints.txt --require-hashes
+      - name: The wheel and the sdist hold every file under src/cca
+        run: uv run python docker/check_dist.py --package src/cca dist/*.whl dist/*.tar.gz
+      - name: The sdist holds no local tool directories, engines, weights or private files
+        shell: bash
+        run: |
+          members=$(tar -tzf dist/*.tar.gz)
+          bad=$(grep -E '^[^/]+/(.*/)?(\.venv[^/]*|\.uv-python|\.pre-commit-cache|\.cache|\.git|\.claude|weights|runs)(/|$)|^[^/]+/engines/|(^|/)CLAUDE\.md$' <<<"$members" || true)
+          if [ -n "$bad" ]; then
+            echo "::error title=sdist::the sdist contains local or private files ($(wc -l <<<"$bad") entries)"
+            head -n 20 <<<"$bad"
+            exit 1
+          fi
