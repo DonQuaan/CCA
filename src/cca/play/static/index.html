@@ -76,6 +76,10 @@
   <section class="side-col card" aria-labelledby="game-heading">
     <h2 id="game-heading" class="card-title" data-i18n="game_heading">Game</h2>
     <p class="status" id="status" role="status"></p>
+    <div class="ask-banner" id="ask-banner" hidden>
+      <span data-i18n="ask_text">CCA's move did not arrive.</span>
+      <button type="button" class="btn btn-small" id="ask-btn" data-i18n="ask_cca">Ask CCA to move</button>
+    </div>
     <p class="hint seed-note" id="seed-note"></p>
     <div class="review-banner" id="review-banner" hidden>
       <span id="review-text"></span>
@@ -237,7 +241,7 @@
       <dt data-i18n="g_knobs_t">Knobs</dt><dd data-i18n="g_knobs">kl_weight (imitation strength), exploit (weight on the human-aware value), entropy_bonus, risk_budget (max expected-score sacrifice), tunnel and habit (stress effects), opp_temperature (flattened opponent model).</dd>
       <dt data-i18n="g_bank_t">Risk bank</dt><dd data-i18n="g_bank">What the opponent has given away minus the risk CCA has already taken; it caps the risk budget.</dd>
       <dt data-i18n="g_latent_t">Stress, drive, opponent stress, chaos</dt><dd data-i18n="g_latent">Virtual, latent control signals inspired by, not models of, physiology. Chaos u0-u2 come from the configured chaos driver (by default a deterministic Lorenz attractor; its AR(1) control condition when a config file selects it): a reproducible source of variability, not a model of temperament.</dd>
-      <dt data-i18n="g_seed_t">Seed</dt><dd data-i18n="g_seed">Fixes CCA's own random draws. A game started without a seed gets a secret one, committed to (SHA-256) when the game starts and revealed when it ends. Replaying an untimed game on this server with the same seed, settings and moves repeats CCA's decisions when the engine search and the human model are deterministic (one engine thread; every decision starts from a cleared engine). Timed games also depend on the clock.</dd>
+      <dt data-i18n="g_seed_t">Seed</dt><dd data-i18n="g_seed">Fixes CCA's own random draws. A game started without a seed gets a secret one, committed to (SHA-256) when the game starts and revealed when it ends. Replaying an untimed game on this server with the same seed, settings and moves repeats CCA's decisions when the engine search and the human model are deterministic (one engine thread; every decision starts from a cleared engine). Timed games also depend on the clock, and so does a decision that a public server's time cap cuts short.</dd>
       <dt data-i18n="g_think_t">Think time</dt><dd data-i18n="g_think">Seconds a human-like player would spend (hand-set model, not fitted); shown as a delay only if you enable it.</dd>
     </dl>
     <p data-i18n="about_docs">Details and sources: docs/science.md, docs/architecture.md and docs/adr/0005-honest-science-labelling.md in the CCA source.</p>

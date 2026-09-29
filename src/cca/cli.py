@@ -103,6 +103,19 @@ def _bounded_int(lo: int, hi: int) -> Callable[[str], int]:
     return parse
 
 
+def _bounded_float(lo: float, hi: float) -> Callable[[str], float]:
+    def parse(text: str) -> float:
+        try:
+            value = float(text)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"expected a number, got {text!r}") from None
+        if not lo <= value <= hi:  # (also refuses nan)
+            raise argparse.ArgumentTypeError(f"must be between {lo:g} and {hi:g}")
+        return value
+
+    return parse
+
+
 def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--stockfish", help="path to Stockfish (default: auto-detect)")
     p.add_argument("--threads", type=int, default=1, help="Stockfish threads (1 = reproducible)")
@@ -286,7 +299,54 @@ def cmd_play(args: argparse.Namespace) -> int:
     """Serve the browser simulator until interrupted (engines warm up in the background)."""
     from cca.engines.stockfish import EngineNotFoundError, find_stockfish
     from cca.play.app import Engines, PlayApp, PlaySettings
-    from cca.play.server import run
+    from cca.play.limits import resolve_limits
+    from cca.play.server import (
+        LOG_HOPS_NEEDS_PUBLIC,
+        PEER_CAP_NEEDS_A_BOUND,
+        PEER_CAP_NEEDS_DIRECT,
+        PUBLIC_NEEDS_A_HOST_NAME,
+        PUBLIC_NEEDS_A_PUBLIC_HOST,
+        ServerOptions,
+        is_loopback,
+        run,
+    )
+
+    if args.public and is_loopback(args.host):
+        print(f"error: {PUBLIC_NEEDS_A_PUBLIC_HOST}", file=sys.stderr)
+        return 1
+    if args.public and not args.allowed_host:
+        print(f"error: {PUBLIC_NEEDS_A_HOST_NAME}", file=sys.stderr)
+        return 1
+    if args.log_forwarded_hops and not args.public:
+        print(f"error: {LOG_HOPS_NEEDS_PUBLIC}", file=sys.stderr)
+        return 1
+    if args.max_connections_per_peer is not None:
+        problem = None
+        if args.trusted_proxies:
+            problem = PEER_CAP_NEEDS_DIRECT
+        elif not args.public and args.max_connections is None:
+            problem = PEER_CAP_NEEDS_A_BOUND
+        if problem is not None:
+            print(f"error: {problem}", file=sys.stderr)
+            return 1
+    options = ServerOptions(
+        public=args.public,
+        trusted_proxies=args.trusted_proxies,
+        frame_ancestors=tuple(dict.fromkeys(args.frame_ancestor or ())),
+        allowed_hosts=tuple(dict.fromkeys(args.allowed_host or ())),
+        log_forwarded_hops=args.log_forwarded_hops,
+    )
+    limits = resolve_limits(
+        public=args.public,
+        max_sessions_per_client=args.max_sessions_per_client,
+        decisions_per_minute=args.decisions_per_minute,
+        max_queue=args.max_queue,
+        session_idle_minutes=args.session_idle_minutes,
+        max_connections=args.max_connections,
+        max_think_seconds=args.max_think_seconds,
+        reads_per_minute=args.reads_per_minute,
+        max_connections_per_peer=args.max_connections_per_peer,
+    )
 
     def build() -> Engines:
         engine = _engine(args)
@@ -306,13 +366,135 @@ def cmd_play(args: argparse.Namespace) -> int:
             threads=args.threads,
             hash_mb=args.hash,
             max_sessions=args.max_sessions,
+            limits=limits,
         )
         app = PlayApp(build, settings)  # also checks the Elo defaults against the API ranges
     # ConfigError and a TOML syntax error are ValueErrors; an unreadable --config is an OSError.
     except (EngineNotFoundError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    return run(app, host=args.host, port=args.port, open_browser=not args.no_browser)
+    return run(
+        app, host=args.host, port=args.port, open_browser=not args.no_browser, options=options
+    )
+
+
+def _checked(kind: str) -> Callable[[str], str]:
+    """An argparse type for a public-mode value: ``origin`` (an exact https origin) or ``host``.
+
+    A bad value is reported by argparse with the validator's own message.
+    """
+
+    def parse(text: str) -> str:
+        from cca.play.server import parse_allowed_host, parse_frame_ancestor
+
+        check = parse_frame_ancestor if kind == "origin" else parse_allowed_host
+        try:
+            return check(text)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(str(exc)) from None
+
+    return parse
+
+
+def _add_public(p: argparse.ArgumentParser) -> None:
+    """The public-mode flags of ``cca play`` (all off unless given or implied by --public)."""
+    p.add_argument(
+        "--public",
+        action="store_true",
+        help="public demo mode (e.g. on Hugging Face Spaces): needs a non-loopback --host and "
+        "--allowed-host; turns the limits below on with the defaults in brackets and logs one "
+        "line per request (no addresses)",
+    )
+    p.add_argument(
+        "--allowed-host",
+        action="append",
+        type=_checked("host"),
+        metavar="NAME",
+        help="public host name answered besides IP addresses and localhost, e.g. "
+        "owner-space.hf.space (repeatable)",
+    )
+    p.add_argument(
+        "--trusted-proxies",
+        type=_bounded_int(0, 8),
+        default=0,
+        metavar="N",
+        help="reverse proxies in front: the client is the X-Forwarded-For entry N hops from the "
+        "right (0: the header is ignored; 1 on Hugging Face Spaces; --log-forwarded-hops "
+        "counts them on other platforms)",
+    )
+    p.add_argument(
+        "--log-forwarded-hops",
+        action="store_true",
+        help="with --public: add to each request-log line the NUMBER of X-Forwarded-For "
+        "entries (xff=N; never an address), to calibrate --trusted-proxies after a deploy "
+        "behind a platform that does not document its proxies: use the smallest N seen on "
+        "the page's own requests",
+    )
+    p.add_argument(
+        "--frame-ancestor",
+        action="append",
+        type=_checked("origin"),
+        metavar="ORIGIN",
+        help="https origin allowed to show the page in a frame, e.g. https://huggingface.co "
+        "(repeatable; default: no framing)",
+    )
+    p.add_argument(
+        "--max-sessions-per-client",
+        type=_bounded_int(1, 1024),
+        metavar="N",
+        help="games one client keeps; a new one replaces its least recently used [public: 3]",
+    )
+    p.add_argument(
+        "--decisions-per-minute",
+        type=_bounded_int(1, 600),
+        metavar="N",
+        help="CCA decisions (moves and position-lab analyses) per client and minute; more get "
+        "429 [public: 20]",
+    )
+    p.add_argument(
+        "--max-queue",
+        type=_bounded_int(0, 1024),
+        metavar="N",
+        help="requests that may wait for the engine; more get 503 (busy) [public: 6]",
+    )
+    p.add_argument(
+        "--session-idle-minutes",
+        type=_bounded_int(1, 7 * 24 * 60),
+        metavar="N",
+        help="games unused this long are dropped [public: 30]",
+    )
+    p.add_argument(
+        "--max-connections",
+        type=_bounded_int(1, 1024),
+        metavar="N",
+        help="connections handled at once, one thread each; more get 503 (busy). Also caps "
+        "API requests in progress per client (8) and requests waiting for a busy game (2), "
+        "and gives request heads 10 s [public: 64]",
+    )
+    p.add_argument(
+        "--max-connections-per-peer",
+        type=_bounded_int(1, 1024),
+        metavar="N",
+        help="with --trusted-proxies 0 on a server that clients reach directly (no proxy in "
+        "front): connections one address (an IPv6 /64) may have open at once, whatever they "
+        "are doing; more get 503. Needs --max-connections or --public. Never behind a proxy, "
+        "even an untrusted one (every connection then has the proxy's address): there the "
+        "platform's edge is expected to buffer requests [public: off]",
+    )
+    p.add_argument(
+        "--max-think-seconds",
+        type=_bounded_float(1.0, 3600.0),
+        metavar="S",
+        help="wall-clock cap of each CCA decision (moves and position-lab analyses) once it "
+        "has the engine: the search is shortened to meet it (not reproducible then) "
+        "[public: 20]",
+    )
+    p.add_argument(
+        "--reads-per-minute",
+        type=_bounded_int(1, 6000),
+        metavar="N",
+        help="reads of a game's decisions or PGN per client and minute; more get 429 [public: 60]",
+    )
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -375,6 +557,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=16,
         help="games kept in memory (least recently used ones are dropped)",
     )
+    _add_public(p_play)
     _add_common(p_play)
     return parser
 

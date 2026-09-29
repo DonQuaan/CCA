@@ -14,6 +14,34 @@ export function canMove(ui) {
     !ui.busy && !ui.thinking && !ui.starting && !ui.labBusy)
 }
 
+// CCA's move is due and nothing asks for it: no request in flight, no automatic retry
+// waiting. Only a failed request for it leads here (one not asked again by itself, or no
+// longer); the page then offers to ask (main.js), or the game would stay on CCA's turn with
+// nothing to click.
+export function canAsk(ui) {
+  const s = ui.state
+  return Boolean(s && !s.game_over && s.to_move === "cca" &&
+    !ui.busy && !ui.thinking && !ui.retrying && !ui.starting)
+}
+
+// A public server refuses a request it cannot take now (too fast, too many at once, busy,
+// game busy, no free game slot) with a `limit` and a Retry-After. Such a refusal of CCA's move
+// is asked again by itself after that wait (1 to RETRY_MAX_S seconds), for up to
+// RETRY_WINDOW_S seconds after the first refusal in a row (by time, not by count: the wait
+// is the server's); then canAsk() holds. A new context cancels the wait.
+export const RETRY_MAX_S = 60
+export const RETRY_WINDOW_S = 15 * 60
+
+// Seconds to wait before asking again after `err`, or null (not by itself). `waitedMs`:
+// milliseconds since the first refusal in a row.
+export function retryDelay(err, waitedMs) {
+  if (!err || typeof err.limit !== "string") return null
+  const after = err.retryAfter
+  if (typeof after !== "number" || !Number.isFinite(after)) return null
+  const wait = Math.min(RETRY_MAX_S, Math.max(1, Math.ceil(after)))
+  return waitedMs + wait * 1000 <= RETRY_WINDOW_S * 1000 ? wait : null
+}
+
 // `api`: {get(path), post(path, body)} returning promises (rejecting with {status, message,
 // state}); `view`: the rendering hooks listed below; `sleep(ms)`; `now()` in milliseconds.
 export function createFlow({ui, api, view, sleep, now}) {
@@ -21,6 +49,7 @@ export function createFlow({ui, api, view, sleep, now}) {
     ui.gen++
     ui.busy = false
     ui.thinking = false
+    ui.retrying = false
     ui.reveal = null
     ui.review = null
     ui.lab = null
@@ -78,6 +107,28 @@ export function createFlow({ui, api, view, sleep, now}) {
     startSession(res.game_id, res.state)
   }
 
+  // The page's first game, when there is none to resume. A refusal by a public server's
+  // limits whose Retry-After is short (at most RETRY_MAX_S; a busy engine, say) is waited for
+  // and the game asked for again, within RETRY_WINDOW_S; a longer wait (a full table) or any
+  // other failure is only said. view.noGame(err, retryIn) says why no game is shown: with no
+  // game there is no status to render. A game started meanwhile (New game) ends the tries.
+  async function firstGame() {
+    const since = now()
+    for (;;) {
+      try {
+        await newGame({})
+        return
+      } catch (err) {
+        const short = err && typeof err.retryAfter === "number" && err.retryAfter <= RETRY_MAX_S
+        const wait = short ? retryDelay(err, now() - since) : null
+        view.noGame(err, wait)
+        if (wait === null) return
+        await sleep(wait * 1000)
+        if (ui.state || ui.starting) return
+      }
+    }
+  }
+
   async function humanMove(move) {
     ui.busy = true
     ui.lab = null
@@ -98,12 +149,18 @@ export function createFlow({ui, api, view, sleep, now}) {
       else await refresh()
       if (gen !== ui.gen) return
       view.drawBoard(false)  // undo the piece the board moved locally if nothing was applied
+      view.render()  // no longer sending, even when the state could not be read again
     }
     if (ui.state.game_over) view.announceOver(ui.state)
     maybeThink()
   }
 
-  async function maybeThink() {
+  function maybeThink() {
+    return think(null)
+  }
+
+  // `since`: now() at the first refusal in a row of CCA's move by the server's limits, or null.
+  async function think(since) {
     const s = ui.state
     if (!s || s.game_over || s.to_move !== "cca" || ui.thinking) return
     ui.thinking = true
@@ -130,8 +187,19 @@ export function createFlow({ui, api, view, sleep, now}) {
       if (gen !== ui.gen) return
       ui.reveal = null
       ui.thinking = false
-      view.showError(err)
+      const first = since ?? now()
+      const wait = retryDelay(err, now() - first)
+      ui.retrying = wait !== null
+      view.showError(err, wait)
       await refresh()
+      if (gen !== ui.gen) return
+      view.render()  // no longer thinking, even when the state could not be read again
+      if (wait === null) return
+      await sleep(wait * 1000)
+      if (gen !== ui.gen) return
+      ui.retrying = false
+      view.render()
+      think(first)
     }
   }
 
@@ -175,5 +243,5 @@ export function createFlow({ui, api, view, sleep, now}) {
     maybeThink()
   }
 
-  return {refresh, startSession, newGame, humanMove, maybeThink, lab, undo}
+  return {refresh, startSession, newGame, firstGame, humanMove, maybeThink, lab, undo}
 }

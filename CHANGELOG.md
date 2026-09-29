@@ -6,6 +6,90 @@ All notable changes to CCA are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-29
+
+Planned as 0.2.0: a public mode for `cca play` and the pipelines that deploy it as an online
+demo. Without its flags `cca play` behaves as in 0.1.0. Guide: `docs/simulator.md` (section
+*Public mode*); deploys: `docs/deploy.md`.
+
+### Added
+- **`cca play --public`**, a public demo mode behind a reverse proxy that terminates HTTPS. It
+  needs a non-loopback `--host` and `--allowed-host`; otherwise, for `--log-forwarded-hops`
+  without `--public`, and for `--max-connections-per-peer` with `--trusted-proxies` other than 0
+  or without `--max-connections` and `--public`, `cca play` exits 1 before it opens a port. New
+  flags:
+  - `--allowed-host NAME` (repeatable): public host names answered by the `Host` guard (421
+    otherwise); their `https://` origins also pass the POST origin check.
+  - `--trusted-proxies N` (0-8, default 0): the client is the `X-Forwarded-For` entry N hops
+    from the right; with 0 the header is ignored, and visitors behind one proxy address count
+    as one client for every limit, games included. `X-Real-IP`, `Forwarded` and
+    `X-Forwarded-Host` are never read; IPv6 clients are counted by /64.
+  - `--log-forwarded-hops`: each request-log line also gives the number of `X-Forwarded-For`
+    entries (never an entry), to find the right `--trusted-proxies` after a deploy.
+  - `--frame-ancestor ORIGIN` (repeatable, exact https origins): CSP `frame-ancestors` lists
+    them and `X-Frame-Options` is left out; by default nothing may frame the page.
+  - Limits, off by default and on with `--public` (its default in brackets):
+    `--max-sessions-per-client` [3], `--decisions-per-minute` [20] (a token bucket over CCA moves
+    and position-lab analyses), `--reads-per-minute` [60] (reads of a game's decisions or PGN),
+    `--max-queue` [6] (a bounded waiting line in front of the one engine, served by client in
+    turn), `--session-idle-minutes` [30], `--max-think-seconds` [20] (a wall-clock cap on each
+    decision once it has the engine; a decision it shortens is not reproducible) and
+    `--max-connections` [64] (bounded threads, with request heads and bodies due within 10 s,
+    a place given up by a connection still waiting for its head, at most 8 API requests in
+    progress per client and 2 requests waiting for a busy game).
+  - `--max-connections-per-peer N` (1-1024; off by default, also with `--public`): connections
+    one address (an IPv6 /64) may have open at once, whatever they are doing; one more gets 503
+    (`max_connections_per_peer`). Only for a server that clients reach directly: it needs
+    `--trusted-proxies 0` and `--max-connections` (or `--public`), and must not be used behind
+    any proxy, where every connection has the proxy's address.
+  - A refusal is a 429 (too fast, too many requests at once), a 503 (busy, too many connections
+    from one address, all game slots in use) or a 409 (game busy), with a `Retry-After` header
+    and a `limit` field naming the limit. A decision the server could not make gives its token
+    back. On a full game table a new game takes the client's own game, then (never a game with a
+    `/think` in progress) a finished game, then a game of a client holding its full share, then
+    the game unplayed the longest once nothing was played in it for 900 s if it is the human's
+    move and the human has moved in it, 300 s otherwise. Playing means creating the game, a CCA
+    decision, or, once CCA has decided in the game, a human move further than the game had
+    been (not a move played again after a take-back); reading a game does not keep it, and a
+    new game that replaces its client's own game keeps that game's time, so restarting games
+    and making a first move in each never keeps a slot. A game taken this way answers 404 with
+    the reason. `/api/info` shows the limits in force and the requests
+    waiting.
+  - A start-up notice (limits, host names, how the client address is found) replaces the
+    exposure warning, and one log line per request (UTC time, method, route template, status,
+    duration) goes to standard error, with no address and no game id. Client addresses only
+    key in-memory counters. On shutdown a running decision stops early and, with
+    `--max-queue`, the requests waiting for the engine are refused.
+- **Refusals in the page:** every limit is explained in English and Vietnamese with its wait. A
+  refused CCA move is asked for again after each `Retry-After` (1-60 s) for up to 15 minutes;
+  after that, or after any other failure of CCA's move, an **Ask CCA to move** button appears.
+  A refused first game is retried the same way when the wait is at most 60 s.
+- **Deploy pipelines for the online demo**, both deploying a released image pinned by digest;
+  neither workflow builds an image (Render runs the release image, and the Space builds a thin
+  image `FROM` it):
+  - **Render** (primary, free plan): the Blueprint `deploy/render/render.yaml` (one web service,
+    the QRE human model, a reduced engine budget, and `--trusted-proxies 0` until the client
+    address is calibrated after the first deploy, so until then visitors behind one proxy
+    address share one set of limits) and `deploy-render.yml`, which checks that the version's
+    tag ships the Blueprint, resolves the image digest anonymously, triggers the
+    service's deploy hook (secret `RENDER_DEPLOY_HOOK_URL` in the environment `render`) and
+    waits until `/healthz` serves the version with its engine ready; helper
+    `deploy/render/service.py`, tests in `docker/tests/test_deploy_render.py`.
+  - **Hugging Face Spaces** (alternative; a Docker Space needs a paid plan):
+    `deploy-space.yml` renders `deploy/huggingface/` (a Dockerfile `FROM` the release image
+    with the public-mode command, and the Space card) from the version's tag, pushes it to the
+    Space and waits until a container built from that commit serves the version; helper
+    `deploy/huggingface/space.py`, tests in `docker/tests/test_deploy_space.py`.
+- **Constrained CI smoke:** `image.yml` runs the default image with the Render Blueprint's own
+  command under `--cpus 0.1 --memory 488m` (488 MiB, under 512 MB in either unit;
+  `docker/constrained.py`), plays a short game
+  through the HTTP API and fails on an OOM kill, a stopped container, a refused request, a
+  decision slower than `--max-think-seconds` plus 10 s, an illegal move or a position that
+  differs from a replay with python-chess; latencies and peak memory go to the job summary.
+- **Docs:** *Public mode* in `docs/simulator.md` (flags, limits and refusals, what a visitor
+  sees, the security model behind a proxy, privacy, operating one instance), `docs/deploy.md`,
+  and an *Online demo* note in both READMEs.
+
 ## [0.1.0] - 2026-09-28
 
 First research release of the C-AIME decision core, with a browser simulator (`cca play`), a
@@ -230,5 +314,6 @@ them was in a published release; the resulting behaviour is described under *Add
 
 </details>
 
-[Unreleased]: https://github.com/DonQuaan/CCA/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/DonQuaan/CCA/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/DonQuaan/CCA/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/DonQuaan/CCA/releases/tag/v0.1.0

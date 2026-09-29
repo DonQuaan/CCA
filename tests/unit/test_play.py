@@ -536,9 +536,12 @@ def test_move_think_flow_and_decisions() -> None:
     for key in ("q_opt", "stress", "drive", "opp_stress", "chaos", "think_time", "compute_s"):
         assert key in entry
     assert len(entry["chaos"]) == 3
-    decisions = app.decisions(game_id)["decisions"]
-    assert isinstance(decisions, list)
-    assert decisions == [{"ply": 1, "decision": decision}]
+    body = app.decisions(game_id)
+    # Joined from the decisions serialised when made: the very bytes of serialising them now.
+    assert body == play_serialize.dumps({"decisions": [{"ply": 1, "decision": decision}]})
+    decisions = json.loads(body)["decisions"]
+    assert [item["ply"] for item in decisions] == [1]
+    assert decisions[0]["decision"]["move"] == move
 
 
 def test_move_rejections() -> None:
@@ -640,7 +643,7 @@ def test_undo_takes_back_the_pair_and_marks_the_restart() -> None:
     state = state_of(app.undo(game_id))
     assert state["moves"] == []
     assert state["history"] == []
-    assert app.decisions(game_id)["decisions"] == []
+    assert json.loads(app.decisions(game_id)) == {"decisions": []}
     app.move(game_id, {"uci": "d2d4"})
     state = state_of(app.undo(game_id))  # CCA had not answered yet: one ply
     assert state["moves"] == []

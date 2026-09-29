@@ -84,6 +84,18 @@ jobs:
         run: >-
           python3 docker/smoke.py cca:ci --variant "$VARIANT"
           --expect-version "$VERSION" --expect-revision "$GITHUB_SHA"
+      # The public demo on Render's free plan (deploy/render/render.yaml) gets 0.1 CPU and 512 MB
+      # (https://render.com/docs/free); 488m (488 MiB) is under 512 MB in either unit. The default
+      # image runs the Blueprint's own command under those limits, its port on 127.0.0.1 only,
+      # and plays a short game through the HTTP API; the step fails on an OOM kill, a decision
+      # slower than --max-think-seconds + 10 s or an illegal move, and writes a table of
+      # latencies and peak memory to the job summary. Nothing is pushed. On a release it is also
+      # a gate: publish needs build-test, so an image that fails here is not pushed.
+      - name: Render free-plan limits (0.1 CPU, 512 MB) with the Blueprint's command
+        if: ${{ matrix.variant == 'default' }}
+        run: >-
+          python3 docker/constrained.py cca:ci --blueprint deploy/render/render.yaml
+          --cpus 0.1 --memory 488m
 
   publish:
     name: push + attest (${{ matrix.variant }})

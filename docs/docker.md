@@ -10,8 +10,8 @@ decision to bundle Stockfish, are recorded in
 
 | Image and tags | Dockerfile target | Contents |
 |---|---|---|
-| `ghcr.io/donquaan/cca:0.1.0`, `ghcr.io/donquaan/cca:latest` | `runtime` | CCA, Stockfish 19 and the QRE human model (derived from the engine). |
-| `ghcr.io/donquaan/cca:0.1.0-maia2`, `ghcr.io/donquaan/cca:latest-maia2` | `runtime-maia2` | The same, plus CPU-only PyTorch 2.8.0 and maia2 0.11 for the Maia-2 human model. The Maia-2 weights are **not** included; they are downloaded on first use. |
+| `ghcr.io/donquaan/cca:0.2.0`, `ghcr.io/donquaan/cca:latest` | `runtime` | CCA, Stockfish 19 and the QRE human model (derived from the engine). |
+| `ghcr.io/donquaan/cca:0.2.0-maia2`, `ghcr.io/donquaan/cca:latest-maia2` | `runtime-maia2` | The same, plus CPU-only PyTorch 2.8.0 and maia2 0.11 for the Maia-2 human model. The Maia-2 weights are **not** included; they are downloaded on first use. |
 
 **Tag rules:**
 
@@ -30,7 +30,7 @@ Contents: [Quick start](#quick-start) · [What is in the images](#what-is-in-the
 ### Web simulator
 
 ```bash
-docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/donquaan/cca:0.1.0
+docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/donquaan/cca:0.2.0
 ```
 
 Then open <http://127.0.0.1:8765/> or <http://localhost:8765/>.
@@ -51,7 +51,7 @@ To change the simulator's settings, give the whole command after the image name.
 the default command, so repeat `--host 0.0.0.0 --port 8765 --no-browser`:
 
 ```bash
-docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/donquaan/cca:0.1.0 \
+docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/donquaan/cca:0.2.0 \
   play --host 0.0.0.0 --port 8765 --no-browser --human qre --persona tal --elo-self 2000
 ```
 
@@ -60,7 +60,7 @@ Every `cca play` flag is listed in [simulator.md](simulator.md#flags).
 ### UCI engine
 
 ```bash
-docker run -i --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci
+docker run -i --rm --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci
 ```
 
 - `-i` keeps standard input open, and the GUI speaks UCI over it.
@@ -74,10 +74,10 @@ docker run -i --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci
 A quick check that the engine answers:
 
 ```bash
-printf 'uci\nisready\nquit\n' | docker run -i --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci
+printf 'uci\nisready\nquit\n' | docker run -i --rm --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci
 ```
 
-It prints `id name CCA 0.1.0`, `id author`, the option list and `uciok`. In the default image
+It prints `id name CCA 0.2.0`, `id author`, the option list and `uciok`. In the default image
 an `info string maia2 unavailable (...); falling back to QRE human model` line then comes
 before `readyok`. Its hint to run `uv sync --extra maia2` does not apply inside the image: use
 the `-maia2` image, or set `CCA_HumanModel` to `qre`. The UCI options are listed in
@@ -91,12 +91,12 @@ handshake never waits for a download.
 
 ```sh
 #!/bin/sh
-exec docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci
+exec docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci
 ```
 
 ```bat
 @echo off
-docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci
+docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci
 ```
 
 These wrappers have **not** been tested end to end with a GUI. Docker must be running, and
@@ -109,7 +109,7 @@ which needs no arguments. Setup steps for individual GUIs and for lichess-bot ar
 ### Maia-2 variant
 
 ```bash
-docker run --rm -p 127.0.0.1:8765:8765 -v cca-data:/data ghcr.io/donquaan/cca:0.1.0-maia2
+docker run --rm -p 127.0.0.1:8765:8765 -v cca-data:/data ghcr.io/donquaan/cca:0.2.0-maia2
 ```
 
 - **First start:**
@@ -130,7 +130,7 @@ docker run --rm -p 127.0.0.1:8765:8765 -v cca-data:/data ghcr.io/donquaan/cca:0.
 - **UCI with Maia-2:**
 
   ```bash
-  docker run -i --rm --no-healthcheck -v cca-data:/data ghcr.io/donquaan/cca:0.1.0-maia2 uci
+  docker run -i --rm --no-healthcheck -v cca-data:/data ghcr.io/donquaan/cca:0.2.0-maia2 uci
   ```
 
   `CCA_HumanModel` defaults to `maia2` here. The default `CCA_Device` (`gpu`) uses the CPU when
@@ -141,7 +141,7 @@ docker run --rm -p 127.0.0.1:8765:8765 -v cca-data:/data ghcr.io/donquaan/cca:0.
   ```bash
   docker run --rm -p 127.0.0.1:8765:8765 \
     --mount type=bind,source=/path/to/weights,target=/data/maia2,readonly \
-    ghcr.io/donquaan/cca:0.1.0-maia2
+    ghcr.io/donquaan/cca:0.2.0-maia2
   ```
 
   - The folder must hold `rapid_model.pt` (or `blitz_model.pt` for `--maia2-type blitz`) with
@@ -156,9 +156,9 @@ The entry point is `cca`, so any subcommand works. Start commands that do not ru
 server with `--no-healthcheck`:
 
 ```bash
-docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 version
-docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 doctor
-docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 \
+docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.2.0 version
+docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.2.0 doctor
+docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.2.0 \
   analyse "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" --human qre
 ```
 
@@ -276,8 +276,8 @@ licence is missing, or if the NNUE file is absent. python-chess's licence is in 
 To copy the Stockfish documents and source out of the image:
 
 ```bash
-docker run --rm --no-healthcheck --entrypoint ls ghcr.io/donquaan/cca:0.1.0 /usr/local/share/doc/stockfish
-id=$(docker create ghcr.io/donquaan/cca:0.1.0)
+docker run --rm --no-healthcheck --entrypoint ls ghcr.io/donquaan/cca:0.2.0 /usr/local/share/doc/stockfish
+id=$(docker create ghcr.io/donquaan/cca:0.2.0)
 docker cp "$id":/usr/local/share/doc/stockfish ./stockfish-doc
 docker rm "$id"
 ```
@@ -299,8 +299,8 @@ in `image.yml` runs these steps in order:
 Check an image with the GitHub CLI:
 
 ```bash
-gh attestation verify oci://ghcr.io/donquaan/cca:0.1.0 -R DonQuaan/CCA
-gh attestation verify oci://ghcr.io/donquaan/cca:0.1.0-maia2 -R DonQuaan/CCA
+gh attestation verify oci://ghcr.io/donquaan/cca:0.2.0 -R DonQuaan/CCA
+gh attestation verify oci://ghcr.io/donquaan/cca:0.2.0-maia2 -R DonQuaan/CCA
 ```
 
 The command succeeds only if the image's digest carries an attestation signed for a GitHub
@@ -309,7 +309,7 @@ Actions run in the repository `DonQuaan/CCA`.
 The labels name the version and the commit:
 
 ```bash
-docker inspect --format '{{json .Config.Labels}}' ghcr.io/donquaan/cca:0.1.0
+docker inspect --format '{{json .Config.Labels}}' ghcr.io/donquaan/cca:0.2.0
 ```
 
 To pin an image by digest, pull `ghcr.io/donquaan/cca@sha256:<digest>`.
@@ -327,8 +327,8 @@ You need Docker with BuildKit (`docker buildx`) and network access. The build do
 From the repository root, as in the Dockerfile's header:
 
 ```bash
-docker buildx build --target runtime --build-arg CCA_VERSION=0.1.0 -t cca:local .
-docker buildx build --target runtime-maia2 --build-arg CCA_VERSION=0.1.0 -t cca:maia2 .
+docker buildx build --target runtime --build-arg CCA_VERSION=0.2.0 -t cca:local .
+docker buildx build --target runtime-maia2 --build-arg CCA_VERSION=0.2.0 -t cca:maia2 .
 ```
 
 If your buildx builder uses the `docker-container` driver, add `--load` so that the image
@@ -376,10 +376,10 @@ Only linux/amd64 is supported: the Stockfish asset, tini and the torch wheel are
 needs only Python 3.11 or later and the `docker` CLI, and is run from the repository root:
 
 ```bash
-python docker/smoke.py cca:local --expect-version 0.1.0
-python docker/smoke.py cca:maia2 --variant maia2 --expect-version 0.1.0
+python docker/smoke.py cca:local --expect-version 0.2.0
+python docker/smoke.py cca:maia2 --variant maia2 --expect-version 0.2.0
 python docker/smoke.py cca:maia2 --variant maia2 --maia2-weights weights/maia2
-python docker/smoke.py ghcr.io/donquaan/cca:0.1.0
+python docker/smoke.py ghcr.io/donquaan/cca:0.2.0
 ```
 
 | Option | Meaning |

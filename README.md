@@ -17,10 +17,10 @@ play against it in a browser simulator that shows its decision signals live, run
 engine in chess GUIs and lichess-bot, and study every mechanism, each documented with its formula
 and its scientific status.
 
-> **Research status (v0.1.0).** The architecture is implemented and tested. Its behavioural
+> **Research status (v0.2.0).** The architecture is implemented and tested. Its behavioural
 > claims (human-likeness, unpredictability, trap-setting against people) are **hypotheses** with
 > pre-registered kill criteria in [`docs/science.md`](docs/science.md#2-pre-registered-falsifiable-predictions);
-> v0.1.0 reports no result for any of them. "Stress" and "drive" are virtual control variables
+> v0.2.0 reports no result for any of them. "Stress" and "drive" are virtual control variables
 > *inspired by*, not models of, human physiology
 > ([ADR-0005](docs/adr/0005-honest-science-labelling.md)). Hand-set parameters are labelled
 > "not fitted".
@@ -55,32 +55,33 @@ the knobs, the latent state and per-move charts. Vietnamese UI, light theme:
 
 ## Quick start
 
-Three ways to run CCA 0.1.0. All of them need Stockfish 19; only the container images include it.
+Three ways to run CCA 0.2.0. All of them need Stockfish 19; only the container images include it.
 If the release files or the images are not available yet (HTTP 404, or `denied` from
-`docker pull`), use [3. From source](#3-from-source).
+`docker pull`), use [3. From source](#3-from-source). A public online demo is being set up; see
+[Online demo](#online-demo).
 
 ### 1. Docker (only Docker needed)
 
 You need Docker (Docker Desktop on Windows and macOS). Images on GitHub Packages, **linux/amd64
 only**: there is no arm64 image, and on an arm64 host Docker may run them under emulation (not
-tested). `ghcr.io/donquaan/cca:0.1.0` (also `latest`) holds CCA, Stockfish 19 and the QRE model
-and runs `cca play --host 0.0.0.0 --port 8765 --no-browser --human qre`; `:0.1.0-maia2` (also
+tested). `ghcr.io/donquaan/cca:0.2.0` (also `latest`) holds CCA, Stockfish 19 and the QRE model
+and runs `cca play --host 0.0.0.0 --port 8765 --no-browser --human qre`; `:0.2.0-maia2` (also
 `latest-maia2`) adds Maia-2 0.11 on CPU-only PyTorch 2.8.0 and runs the simulator with
 `--human maia2 --device cpu`.
 
 ```bash
 # Browser simulator: open http://127.0.0.1:8765/ once the container reports healthy
-docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/donquaan/cca:0.1.0
+docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/donquaan/cca:0.2.0
 
 # UCI engine on stdin/stdout: -i but never -t; no web server runs, so no health check
-docker run -i --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci
+docker run -i --rm --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci
 
 # Maia-2: the rapid checkpoint (about 280 MB, 267 MiB) is downloaded on the first start into the cca-data volume
-docker run --rm -p 127.0.0.1:8765:8765 -v cca-data:/data ghcr.io/donquaan/cca:0.1.0-maia2
-docker run -i --rm --no-healthcheck -v cca-data:/data ghcr.io/donquaan/cca:0.1.0-maia2 uci
+docker run --rm -p 127.0.0.1:8765:8765 -v cca-data:/data ghcr.io/donquaan/cca:0.2.0-maia2
+docker run -i --rm --no-healthcheck -v cca-data:/data ghcr.io/donquaan/cca:0.2.0-maia2 uci
 
 # Environment check (versions, Stockfish banner)
-docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 doctor
+docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.2.0 doctor
 ```
 
 - Publish the port on `127.0.0.1` only: the server binds `0.0.0.0` inside the container and has no
@@ -100,7 +101,7 @@ docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 doctor
 Needs Python 3.11–3.13 (tested; 3.11 or 3.12 for Maia-2). On Windows, install Python from
 [python.org](https://www.python.org/downloads/); on Debian or Ubuntu, if `venv` fails, install the
 `python3-venv` package that its error message names. The wheel
-[`cca_chess-0.1.0-py3-none-any.whl`](https://github.com/DonQuaan/CCA/releases/tag/v0.1.0) does
+[`cca_chess-0.2.0-py3-none-any.whl`](https://github.com/DonQuaan/CCA/releases/tag/v0.2.0) does
 **not** contain Stockfish: install the official `sf_19` build yourself and check it against the
 SHA-256 pins in [`engines/stockfish.lock.json`](engines/stockfish.lock.json).
 
@@ -108,7 +109,7 @@ Linux:
 
 ```bash
 python3.13 -m venv cca-env      # or python3.11 / python3.12
-cca-env/bin/python -m pip install https://github.com/DonQuaan/CCA/releases/download/v0.1.0/cca_chess-0.1.0-py3-none-any.whl
+cca-env/bin/python -m pip install https://github.com/DonQuaan/CCA/releases/download/v0.2.0/cca_chess-0.2.0-py3-none-any.whl
 
 curl -LO https://github.com/official-stockfish/Stockfish/releases/download/sf_19/stockfish-linux-x86-64-universal.tar.gz
 echo "9defc0d4e55d49c65a6d042f3e571a39fcea499ade6dbe741b53b8c65e03611f  stockfish-linux-x86-64-universal.tar.gz" | sha256sum -c -
@@ -128,7 +129,7 @@ Windows (PowerShell):
 
 ```powershell
 py -3.13 -m venv cca-env        # or -3.11 / -3.12
-.\cca-env\Scripts\python -m pip install https://github.com/DonQuaan/CCA/releases/download/v0.1.0/cca_chess-0.1.0-py3-none-any.whl
+.\cca-env\Scripts\python -m pip install https://github.com/DonQuaan/CCA/releases/download/v0.2.0/cca_chess-0.2.0-py3-none-any.whl
 
 curl.exe -LO https://github.com/official-stockfish/Stockfish/releases/download/sf_19/stockfish-windows-x86-64-universal.zip
 if ((Get-FileHash stockfish-windows-x86-64-universal.zip -Algorithm SHA256).Hash -ne '3C8BF1F9EA66A09350A40DF4F632288285AC206D99F33AB5842C408FC30B48A7') { throw 'SHA-256 mismatch' }
@@ -161,7 +162,7 @@ Python 3.10–3.12; on 3.13 the `maia2` extra installs nothing). On Windows, in 
 1. `py -3.12 -m venv cca-maia2`
 2. NVIDIA GPU only (the PyPI `torch` wheel for Windows is CPU-only):
    `.\cca-maia2\Scripts\python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128`
-3. `.\cca-maia2\Scripts\python -m pip install "cca-chess[maia2] @ https://github.com/DonQuaan/CCA/releases/download/v0.1.0/cca_chess-0.1.0-py3-none-any.whl"`
+3. `.\cca-maia2\Scripts\python -m pip install "cca-chess[maia2] @ https://github.com/DonQuaan/CCA/releases/download/v0.2.0/cca_chess-0.2.0-py3-none-any.whl"`
 
 Step 2 must come first: pip keeps a `torch==2.8.0` that is already installed, so the CUDA
 command after step 3 changes nothing. If the CPU wheel is already there, run
@@ -215,6 +216,48 @@ The first use downloads the rapid checkpoint (about 280 MB, 267 MiB) into `weigh
 (override with `CCA_WEIGHTS`); `maia2` checks the download's SHA-256, and CCA refuses any existing
 checkpoint whose SHA-256 differs from its pin.
 
+### Online demo
+
+A public demo of `cca play` on a free hosting tier is being set up; its address will be added
+here once it runs. It is for trying the simulator, not for research runs, and it is limited:
+
+- **Slow.** One engine on a small instance serves every visitor in turn, and you may wait
+  behind other players' moves. On the development machine a CCA move took a few seconds at the
+  default engine budget (200,000 nodes); the demo searches fewer nodes on a free-tier instance,
+  and how long its moves take there was not measured. Limits on CCA moves per minute, on
+  requests waiting for the engine and on game slots can refuse a request; a refused CCA move is
+  asked for again by the page itself, for up to 15 minutes.
+- **Limits shared between visitors at first.** Behind the host's proxy, the server tells
+  visitors apart only once it is told how many proxies stand in front of it
+  ([calibrating the client address](docs/deploy.md#calibrating-the-client-address)). Until
+  then it sees the proxy's address instead of yours, so visitors who come through the same
+  proxy address (possibly everyone) share one set of limits: 3 games at a time and 20 CCA moves
+  per minute for all of them together (the public-mode defaults), and once 3 games exist, a new
+  game by any of them at once replaces the one used least recently, even one still being
+  played.
+- **Coarser than a local run.** To fit the instance, the demo searches with a smaller engine
+  budget and caps the time of each decision, so its measurements (`q_opt`, `q_human`, trap
+  values) are coarser, and its games may not replay exactly.
+- **Sleeps when idle.** The free tier stops the service after 15 minutes without traffic, and
+  the next visit waits while it starts again: about a minute for the host to start the service
+  ([Render: free instances](https://render.com/docs/free)), then the engine's own start on that
+  instance, whose length was not measured.
+- **Games are lost** when it sleeps, restarts or is redeployed: games live only in the server's
+  memory. A game unused for 30 minutes (by default) is dropped. Once visitors are told apart, a
+  game you are playing goes to a newcomer only while every game slot is taken, and then only if
+  nothing was played in it for 15 minutes while it is your move (once you have moved in it), or
+  for 5 minutes while CCA's move waits unasked (or refused by a limit) or before your first
+  move, or if you hold 3 games. CCA's moves count as play, and so do yours once CCA has moved
+  in the game (not a move played again after a take-back); a game whose CCA move is being
+  worked out is never taken. Until visitors are told apart, the shared limits above apply.
+- **QRE human model only**, not Maia-2: CCA's human prior and its model of you come from the
+  engine-derived QRE baseline, so its moves and numbers can differ from a local run with Maia-2.
+  As everywhere in CCA, the numbers are its internal decision variables, not measurements of you.
+- No account and no cookies; the server logs no addresses (the host may keep logs of its own).
+
+How it is deployed: [`docs/deploy.md`](docs/deploy.md); its limits and privacy rules:
+[public mode](docs/simulator.md#public-mode).
+
 ## Play in the simulator
 
 `cca play` serves a local web app on `127.0.0.1:8765` (standard-library HTTP server, vendored
@@ -252,7 +295,8 @@ board code; the page requests nothing from other hosts) and opens your browser. 
 Server flags: `--host` (default loopback; any other address prints a warning, as there is no
 authentication), `--port` (`0` = any free port), `--no-browser` (use it over SSH or on a machine
 without a desktop), `--max-sessions`, plus the engine flags below. `GET /healthz` answers
-`{"status": "ok", "version": ..., "ready": ...}`.
+`{"status": "ok", "version": ..., "ready": ...}`. A public demo behind a hosting service's proxy
+uses `--public` and its limits ([public mode](docs/simulator.md#public-mode); since v0.2.0).
 
 ## Use CCA as a UCI engine
 
@@ -275,7 +319,7 @@ budget is `CCA_Nodes` plus the clock. Each move comes with an
 | Scid vs. PC | Tools → Analysis Engines, add an engine; *Command*: full path of `cca-uci` (*Parameters* empty), or full path of `cca` with *Parameters* `uci`; protocol UCI. Scid ignores `UCI_*` options, so set `CCA_OpponentElo`. |
 | ChessBase / Fritz | Fritz 19: Engines → Create UCI Engine; ChessBase 18: Home → UCI Engine; browse to `cca-uci.exe`. |
 | lichess-bot | `engine.name: cca-uci` (see below). |
-| Docker | GUIs start one executable: a wrapper script that runs `docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci` (a `.bat` needs `@echo off`; pull the image first). See [gui-integration §11](docs/gui-integration.md#11-docker). |
+| Docker | GUIs start one executable: a wrapper script that runs `docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci` (a `.bat` needs `@echo off`; pull the image first). See [gui-integration §11](docs/gui-integration.md#11-docker). |
 
 These steps come from each program's source or documentation (Arena: third-party guides). CCA
 was tested through python-chess 1.11.2, the engine layer of lichess-bot, with Stockfish 19 on
@@ -284,7 +328,7 @@ Windows; no GUI has been run with it yet (including whether ChessBase accepts th
 **lichess-bot.** Point `engine.dir` at the environment's `Scripts` or `bin` folder and delete
 `SyzygyPath` and `UCI_ShowWDL` from the default `uci_options`: python-chess refuses to configure
 options CCA does not advertise (`Move Overhead` is supported). Pondering is set only by
-`engine.ponder`, never in `uci_options`; CCA's `bestmove` carries no ponder move, so in v0.1.0
+`engine.ponder`, never in `uci_options`; CCA's `bestmove` carries no ponder move, so in v0.2.0
 nothing actually ponders. Full configuration:
 [gui-integration §10.2](docs/gui-integration.md#102-configure-the-engine).
 
@@ -460,7 +504,7 @@ pass a `.toml` file. Every field and value: [reference §8](docs/reference.md#8-
   provenance:
 
   ```bash
-  gh attestation verify oci://ghcr.io/donquaan/cca:0.1.0 -R DonQuaan/CCA
+  gh attestation verify oci://ghcr.io/donquaan/cca:0.2.0 -R DonQuaan/CCA
   ```
 
 ## Research status and benchmarks

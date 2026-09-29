@@ -30,7 +30,7 @@ Contents: [Starting the simulator](#starting-the-simulator) ·
 [Seeds and commit-reveal](#seeds-and-commit-reveal) · [Position lab](#position-lab) ·
 [Entering moves](#entering-moves) · [Languages and themes](#languages-and-themes) ·
 [Other features](#other-features) · [Local HTTP API](#local-http-api) ·
-[Security model](#security-model) ·
+[Security model](#security-model) · [Public mode](#public-mode) ·
 [Vendored browser files and licences](#vendored-browser-files-and-licences) ·
 [Limits](#limits)
 
@@ -77,6 +77,10 @@ answers from the first moment. Stop the server with Ctrl+C or SIGTERM (for examp
 - Stockfish cannot be found;
 - the persona or the `--config` file cannot be loaded;
 - `--elo-self` or `--elo-oppo` is outside the range the page offers (800-2600 and 400-3000);
+- `--public` is given with a loopback `--host` or without `--allowed-host`,
+  `--log-forwarded-hops` without `--public`, or `--max-connections-per-peer` with a
+  `--trusted-proxies` other than 0 or without `--max-connections` and `--public` (see
+  [Public mode](#public-mode));
 - the address cannot be bound (port in use, address not on this machine).
 
 Invalid argument values, such as `--port 70000` or `--max-sessions 0`, are rejected by the
@@ -92,6 +96,10 @@ Flags of `cca play` only:
 | `--port PORT` | `8765` | TCP port, 0-65535; `0` picks any free port. |
 | `--no-browser` | off | Do not open a web browser. |
 | `--max-sessions N` | `16` | Games kept in memory, 1-1024; the least recently used game is dropped first. |
+
+The flags of a public deployment (`--public`, `--allowed-host`, `--trusted-proxies`,
+`--frame-ancestor` and the limits) are described under [Public mode](#public-mode). Without
+them every limit is off and `cca play` behaves as this guide describes.
 
 Flags shared with `cca analyse` and `cca match`. In `cca play` they are fixed for the life of
 the server and are the defaults of every new game:
@@ -377,7 +385,8 @@ A seed fixes CCA's own random draws.
   moves, repeats CCA's decisions when the engine search and the human model are deterministic.
   That means one engine thread (`--threads 1`). Every decision also starts from a cleared
   engine (`ucinewgame`), so other games on the server do not change the result. Timed games
-  also depend on the clock, through the deadlines and the time-sliced search. This was checked
+  also depend on the clock, through the deadlines and the time-sliced search, and so does a
+  decision under the [decision time cap](#decision-time-cap) of public mode. This was checked
   with the QRE model; with Maia-2 it also depends on Maia-2's inference being deterministic on
   your device.
 - `--seed` on the command line seeds only the position lab.
@@ -500,7 +509,9 @@ guards), [`app.py`](../src/cca/play/app.py) (validation) and
     JSON value), so no response contains markup;
   - API responses carry `Cache-Control: no-store`.
 - **Errors:** `{"error": "<message>"}`. When a 409 concerns the game (it is over, or CCA's move
-  is still being revealed), the body also carries `"state"`.
+  is still being revealed), the body also carries `"state"`. A refusal by one of the
+  [public-mode limits](#limits-and-refusals) also carries `"limit"`, the name of the limit, and
+  a `Retry-After` header in whole seconds.
 
 ### Endpoints
 
@@ -532,14 +543,16 @@ Errors any request can get:
 | 403 | `Origin` differs from the server's own origin, or `Sec-Fetch-Site: cross-site` (POST). |
 | 404 | Unknown path or file. |
 | 405 | Wrong method for a known path; the `Allow` header names the right one. |
-| 408 | The request body did not arrive in time. |
+| 408 | The request body did not arrive in time (with `--max-connections`: within 10 seconds in all). |
+| 409 | With `--max-connections`: two requests already wait for this game (`"limit": "game_busy"`, see [Public mode](#limits-and-refusals)). |
 | 411 | No `Content-Length`, or chunked transfer encoding (POST). |
 | 413 | Body larger than 65536 bytes. |
 | 415 | `Content-Type` is not `application/json` (POST). |
 | 421 | `Host` header not accepted (DNS-rebinding guard). |
+| 429 | Only with limits on (public mode): this client asks too often or has too many requests at once ([Limits and refusals](#limits-and-refusals)). |
 | 500 | Internal error; the details go to the server's standard error, not to the client. |
 | 501 | Unsupported method (for example `PUT`, `OPTIONS`, `HEAD`). |
-| 503 | The engines are still warming up, or an engine error occurred. |
+| 503 | The engines are still warming up, or an engine error occurred. With limits on, also: the server is busy, all game slots are in use, or the server is shutting down ([Limits and refusals](#limits-and-refusals)). |
 
 ### `GET /api/info`
 
@@ -556,6 +569,7 @@ Errors any request can get:
 | `max_sessions` | `--max-sessions`. |
 | `sample` | `false` with `--argmax`. |
 | `chaos_driver` | `"lorenz"` or `"ar1"`. |
+| `limits` | Only when public mode or a limit is on: `public`, `max_sessions_per_client`, `decisions_per_minute`, `max_queue`, `session_idle_minutes`, `max_connections`, `max_think_seconds`, `reads_per_minute`, `max_connections_per_peer` (`null` = no limit) and `waiting`, the requests waiting for the engine right now. Absent otherwise. |
 
 ### `POST /api/games`
 
@@ -646,7 +660,8 @@ answers 415.
 ## Security model
 
 `cca play` has no authentication and no TLS. It is meant to be used from the machine it runs
-on.
+on. This section describes that local use; [Public mode](#public-mode) lists what changes for a
+public demo behind a reverse proxy.
 
 - **Loopback by default.** It binds `127.0.0.1`. Any other `--host` prints this warning to
   standard error:
@@ -658,7 +673,8 @@ on.
   ```
 
   Bind another address only inside a container whose port is published on `127.0.0.1` (see
-  [docker.md](docker.md)).
+  [docker.md](docker.md)), or for a public demo in [Public mode](#public-mode), which prints a
+  notice instead of this warning.
 - **Host check (DNS-rebinding guard).** Every request's `Host` header must name the server,
   with any port; otherwise the answer is 421.
   - On a loopback bind: only `localhost`, `127.0.0.1`, `[::1]` and the bound address itself.
@@ -666,8 +682,8 @@ on.
     and the machine's host name.
 
   A hostile web page that points its own DNS name at your machine always sends that name, so it
-  is refused. A reverse proxy in front of `cca play` must forward `Host` as `localhost` or an
-  IP address.
+  is refused. A reverse proxy in front of `cca play` must forward `Host` as `localhost`, an IP
+  address, or a name given with `--allowed-host` ([Public mode](#host-origin-and-framing)).
 - **Cross-site requests are refused (POST).**
   - An `Origin` header other than `http://<Host>` or `https://<Host>` gives 403, and so does
     `Sec-Fetch-Site: cross-site`.
@@ -695,7 +711,8 @@ on.
     forbidden.
   - `X-Content-Type-Options: nosniff`.
   - `Referrer-Policy: no-referrer`.
-  - `X-Frame-Options: DENY`.
+  - `X-Frame-Options: DENY`. With `--frame-ancestor` this header is left out and
+    `frame-ancestors` lists the given origins ([Public mode](#host-origin-and-framing)).
   - `Cross-Origin-Opener-Policy: same-origin`.
   - `Cross-Origin-Resource-Policy: same-origin`.
 - **Errors are JSON, never HTML,** and client input is never echoed into markup. Tracebacks go
@@ -709,6 +726,490 @@ on.
   the port can still create games, read `/api/info` and use CPU time.
 
 Report vulnerabilities as described in [SECURITY.md](../SECURITY.md).
+
+## Public mode
+
+`cca play --public` runs the simulator as a public demo on a hosting service, behind a reverse
+proxy that terminates HTTPS. It keeps everything described above and adds limits per visitor, a
+cap on the time of each decision, a waiting line in front of the engine that serves visitors in
+turn, settings for the proxy, and a request log without addresses. The deploy pipelines and the
+hosts they target are described in [deploy.md](deploy.md).
+
+> **Status (2026-09-29).** Public mode ships in v0.2.0 (see the [CHANGELOG](../CHANGELOG.md)).
+> It is covered by the unit tests in
+> [`tests/unit/test_play_public.py`](../tests/unit/test_play_public.py); its first public host
+> is the Render demo described in [deploy.md](deploy.md).
+
+### Starting a public server
+
+```bash
+cca play --public --host 0.0.0.0 --port 8765 --no-browser --human qre \
+  --allowed-host demo.example.org --trusted-proxies 1
+```
+
+`demo.example.org` stands for the public host name visitors type; it is a placeholder, not a
+deployment.
+
+- `--public` needs a non-loopback `--host` and at least one `--allowed-host`,
+  `--log-forwarded-hops` needs `--public`, and `--max-connections-per-peer` needs
+  `--trusted-proxies 0` and either `--max-connections` or `--public` (which sets it). Otherwise
+  `cca play` exits with status 1 before it opens a port, with one of these lines:
+
+  ```text
+  error: --public needs a non-loopback --host (e.g. --host 0.0.0.0 in a container): a loopback address cannot be reached from the Internet
+  error: --public needs --allowed-host NAME, the public host name visitors use (e.g. owner-space.hf.space): requests naming another host are refused (DNS-rebinding guard)
+  error: --log-forwarded-hops needs --public: only public mode writes a request log
+  error: --max-connections-per-peer needs --trusted-proxies 0: behind a proxy every connection has the proxy's address, so it would cap the whole site
+  error: --max-connections-per-peer needs --max-connections (or --public, which sets it): only a server that bounds its connections counts them per address
+  ```
+
+- Bind a non-loopback address only where a proxy of the hosting platform stands in front of
+  the port (a container on a hosting service). On your own machine the
+  [Security model](#security-model) above still applies.
+- Instead of the exposure warning, the server prints a notice to standard error, each line
+  starting with `cca play:`. It lists the address, the host names answered, every limit in
+  force (including `--nodes`, and the times after which an unplayed game may go to a
+  newcomer), the decision time cap, the fixed per-client bounds, with `--max-connections` a
+  "Connections per address:" line (the `--max-connections-per-peer` cap, or why there is none),
+  how the client address is found (with a warning when `X-Forwarded-For` is ignored), which
+  origins may frame the page, and that one log line per request follows.
+
+### Public-mode flags
+
+| Flag | Without `--public` | With `--public` | Meaning |
+|---|---|---|---|
+| `--public` | off | | Public mode: requires a non-loopback `--host` and `--allowed-host`, turns on the limits below with the defaults of this column, prints the start-up notice and writes the [request log](#privacy). |
+| `--allowed-host NAME` | none | required | Public host name answered in addition to the names of the bind ([Host check](#host-origin-and-framing)), for example the name the hosting service gives the demo. Repeatable; lower-cased; no scheme, port, path or wildcard. |
+| `--trusted-proxies N` | `0` | `0` | Reverse proxies in front, 0-8: the client is the `X-Forwarded-For` entry N hops from the right. `0` ignores the header. See [Client address](#client-address). |
+| `--log-forwarded-hops` | not allowed | off | Each request-log line also gives `xff=N`, the number of `X-Forwarded-For` entries the request carried (a number, never an address), to find the right `--trusted-proxies` ([Operating](#operating-a-public-instance)). |
+| `--frame-ancestor ORIGIN` | none | none | Exact `https://host[:port]` origin allowed to show the page in a frame. Repeatable. Without it no site may frame the page. |
+| `--max-sessions-per-client N` | no limit | `3` | Games one client keeps, 1-1024; a new game replaces the client's least recently used one ([Game slots](#game-slots)). |
+| `--decisions-per-minute N` | no limit | `20` | CCA decisions (moves and position-lab analyses) per client and minute, 1-600. |
+| `--max-queue N` | no limit | `6` | Requests that may wait for the engine while it works, 0-1024; one more gets 503. Waiting clients take turns ([The engine's waiting line](#the-engines-waiting-line)). |
+| `--session-idle-minutes N` | no limit | `30` | Games unused this long are dropped, 1-10080 (one week). |
+| `--max-connections N` | no limit | `64` | Connections handled at once, one thread each, 1-1024; one more gets 503. It also switches on the bounds on request heads, bodies and waiters ([Threads](#threads-and-request-bodies)). |
+| `--max-connections-per-peer N` | no limit | no limit | Connections one address (an IPv6 /64 as one) may have open at once, whatever they are doing, 1-1024; one more gets 503. Only with `--trusted-proxies 0` and `--max-connections` (or `--public`), on a server that clients reach directly; never behind a proxy, even one not trusted: every connection then has the proxy's address, and the cap would hold for the whole site ([Threads](#threads-and-request-bodies)). |
+| `--max-think-seconds S` | no limit | `20` | Wall-clock cap of each CCA decision (moves and position-lab analyses), 1-3600 seconds, counted once the decision has the engine ([Decision time cap](#decision-time-cap)). |
+| `--reads-per-minute N` | no limit | `60` | Reads of a game's decisions or PGN per client and minute, 1-6000. |
+
+- A value given on the command line replaces the public default.
+- Except `--log-forwarded-hops`, these flags also work without `--public`: each limit flag turns
+  its own limit on (and `/api/info` then shows `limits`); `--max-connections-per-peer` then
+  needs `--max-connections` as well. Only `--public` requires `--allowed-host`, replaces the
+  exposure warning by the notice and writes the request log.
+- `--max-sessions` (default 16) still caps the games of all clients together, and `--nodes`
+  still sets the engine budget of every search; `--public` changes neither.
+- An invalid value is refused by the argument parser (exit status 2) with the reason, for
+  example `'http://x.org' is not an exact https origin such as https://huggingface.co
+  (https://host[:port]: no path, query, user or wildcard)`.
+- Fixed bounds (constants in the code, not flags):
+  - one client holds at most 2 places in the engine's waiting line
+    (`EngineGate.PER_CLIENT_WAITING`), and the line remembers the last turn of at most 256
+    clients (`EngineGate.TURN_MEMORY`);
+  - with `--max-sessions-per-client`, on a full table, a game in which nothing was played may
+    be taken for a newcomer's game after 900 seconds if it is the human's move and the human
+    has moved in it (`PlayApp.RECLAIM_THINKING_S`), after 300 seconds otherwise
+    (`PlayApp.RECLAIM_UNPLAYED_S`); reading it does not count
+    ([Game slots](#game-slots)); the reasons of the last 256 games taken this way are kept for
+    their 404 (`PlayApp.TAKEN_REMEMBERED`);
+  - with `--max-connections`: a request head within 10 seconds (`PlayHandler.HEAD_S`); when all
+    places are taken, a place given up by a connection without a head after 0.5 seconds
+    (`PlayServer.HEAD_GRACE_S`), or after 0.05 seconds by one of an address holding more than
+    its fair share (`PlayServer.FLOOD_GRACE_S`); up to a quarter more threads, at least 2,
+    while connections that gave up their place close (`PlayServer.eviction_slack`), half of
+    them for an address holding its fair share or more (`PlayServer.peer_slack`); at most 8 API
+    requests in progress per client (`PlayServer.API_REQUESTS_PER_CLIENT`); at most 2 requests
+    waiting for one busy game (`PlayApp.GAME_WAITERS`); 10 seconds for a request body
+    (`PlayHandler.BODY_S`); at most 2 seconds (`PlayHandler.DRAIN_S`) and 2 places per client
+    (`PlayServer.DRAINS_PER_CLIENT`) to read away the body of a refused request; and 2 seconds
+    of `Retry-After` for a connection refused at once (`PlayServer.FULL_RETRY_AFTER_S`);
+  - each rate table (decisions, reads) remembers at most 4096 clients (`MAX_TRACKED_CLIENTS`).
+
+The generated flag table is in [reference.md](reference.md#cca-play).
+
+### Limits and refusals
+
+A request refused by a limit gets a JSON error that names the limit (`"limit"`) and a
+`Retry-After` header in whole seconds, which is a hint, not a promise. "A client" is the key
+described under [Client address](#client-address). The numbers in the messages below are
+examples.
+
+| Status | `limit` | When | Message | `Retry-After` |
+|---|---|---|---|---|
+| 429 | `decisions_per_minute` | The client asked for more CCA decisions (`/think` and `/api/analyse`) than `--decisions-per-minute` allows. Each client has a bucket of that many tokens, refilled evenly over a minute, and each decision takes one. | `slow down: at most 20 CCA decisions per minute; try again in 3 s` | Until one token is back. |
+| 429 | `reads_per_minute` | The client read a game's decisions (`/decisions`) or PGN (`/pgn`), the responses that grow with the game, more often than `--reads-per-minute` allows (a bucket as above). | `slow down: at most 60 reads of a game's decisions or PGN per minute; try again in 1 s` | Until one token is back. |
+| 429 | `requests_at_once` | The client already holds 2 places in the engine's waiting line, or, with `--max-connections`, has 8 API requests in progress. | `too many requests at once: wait for your previous ones; try again in 4 s` | The engine line's estimate (below); 1 s for the 8-request bound. |
+| 503 | `max_queue` | `--max-queue` requests already wait for the engine (with `0`: the engine is busy). | `busy: CCA is thinking for other players (6 waiting); try again in 21 s` | Estimate: the moving average of recent engine hold times (2 s before the first) times the requests waiting plus one, 1-300 s. |
+| 503 | `max_connections` | `--max-connections` connections are already being handled and none of them gives its place up ([Threads](#threads-and-request-bodies)). | `busy: 64 connections are open; try again in 2 s` | 2 s. |
+| 503 | `max_connections_per_peer` | With `--max-connections-per-peer`: the connection's address already has that many connections counted, whatever they are doing. Checked first, before any place is given up. | `too many connections from your address: at most 4 at once; try again in 2 s` | 2 s. |
+| 503 | `max_sessions` | A new game finds all `--max-sessions` slots taken and no game may be dropped for it ([Game slots](#game-slots)). | `all 12 game slots are in use; try again in 180 s` | Until the first game may be reclaimed (300 or 900 s after it was last played, by the rules of [Game slots](#game-slots); never a game with a `/think` in progress) or the least recently used game expires (`--session-idle-minutes`), whichever comes first; 60 s without either rule; 1-3600 s. |
+| 409 | `game_busy` | With `--max-connections`: 2 requests already wait for this game while a `/think` holds it. | `this game is busy with another request (CCA is thinking); try again in 4 s` | The engine line's estimate. |
+
+- **Decision tokens.** A decision the server could not make (refused by the engine line with
+  429 or 503, or an engine error, 503) gives its token back. A 409, such as `/think` when it is
+  your turn or `game_busy`, still costs one. Creating a game costs none.
+- **Other answers of public mode:** 408 when a request body does not arrive within 10 seconds
+  (with `--max-connections`); 404 for a game that is gone, and, while the server shuts down,
+  503 `cca play is shutting down; try again in 5 s` (no `limit`) for each request that waits
+  for the engine or asks for it later (with `--max-queue`). The 404 says why the game is gone:
+  - for a game taken for someone else's new game ([Game slots](#game-slots)), one of
+
+    ```text
+    no such game any more: every game slot was in use and this game went to a newcomer, as it had ended
+    no such game any more: every game slot was in use and this game went to a newcomer, as its player had 3 games, the most one player may keep
+    no such game any more: every game slot was in use and this game went to a newcomer, as nothing had been played in it for 5 minutes
+    ```
+
+    The last says 15 minutes for a game on the move of a player who has moved in it; it
+    starts `CCA had not played in it` instead for a game in which the player has moved but CCA
+    has not decided yet (rule 3), and adds `, nor in the older game of its player's it
+    replaced,` before `for` for a game that kept the time of the game it replaced (rule 4).
+    The reason is remembered for the last 256 games taken this way;
+  - otherwise, with `--session-idle-minutes`,
+    `no such game (unused for 30 minutes, replaced by a newer game, or the server restarted)`,
+    also for a game its own client's new game replaced; without it,
+    `no such game (evicted, or the server restarted)`.
+- **Engine budget.** No request can raise the engine's search budget: the API has no field that
+  reaches it, and every engine call keeps the `--nodes` limit.
+
+#### The engine's waiting line
+
+A CCA move, a position-lab analysis and the creation of a game all need the one engine. With
+`--max-queue`, the requests that wait for it form one line, served by client in turn: each time
+the engine is taken, the next turn goes to the waiting client whose last turn is the oldest (a
+client never served comes first; arrival order breaks ties). A client that keeps its two places
+filled therefore gets one decision in turn with every other waiting client, and a newcomer waits
+at most for the decision running and the turn already given. A request counts as waiting as
+soon as it would have to wait, also in a burst on a free engine. Without `--max-queue` the
+engine is a plain lock, as in local use.
+
+#### Decision time cap
+
+With `--max-think-seconds` S (20 in public mode), each CCA decision, a move or a position-lab
+analysis, gets a wall-clock deadline S seconds after it takes the engine; the time it waited in
+line does not count. In a timed game the earlier of this deadline and the clock's own applies.
+CCA meets it as it meets a clock ([Clock rules](#clock-rules)): each engine call gets a share of
+the time left in addition to the node limit, the look-ahead is cut short when time runs out, and
+with less than `fast_budget` (0.6 s by default) available it plays in reflex mode.
+
+- When a share of time ends before the node limit is reached, the decision depends on timing: it
+  is not reproducible, and a replay with the same seed can differ
+  ([Seeds and commit-reveal](#seeds-and-commit-reveal)). Local use has no cap.
+- When the server shuts down with any limit on, a running decision is asked to stop early; with
+  `--max-queue` (on in public mode), the requests still waiting for the engine are also refused
+  at once (503).
+
+### Game slots
+
+With `--max-sessions-per-client` *q*, a new game of a client frees its slot by these rules:
+
+1. A client that already has *q* games loses its own least recently used one.
+2. While all `--max-sessions` slots are taken, the game dropped is, in this order: the client's
+   own least recently used game; then, of the other games, never one with a `/think` in
+   progress (waiting for the engine or deciding): the least recently used finished game of
+   anyone; the least recently used game of a client that holds *q* games (its whole share); the
+   game of anyone in which nothing was played for 900 seconds (`PlayApp.RECLAIM_THINKING_S`) if
+   it is the human's move and the human has moved in it, for 300 seconds
+   (`PlayApp.RECLAIM_UNPLAYED_S`) otherwise, the one unplayed the longest first.
+3. A game is *played* when it is created (but see rule 4), each time CCA makes a decision in it,
+   and, once CCA has made a decision in it, each time its player makes a move that takes the
+   game further than it had ever been. A player's move before CCA's first decision in the game
+   (a first move, which costs no engine time; the page asks for CCA's reply at once, and that
+   decision counts), a move played again after a take-back, take-backs themselves,
+   resignations, reads of the game (its state, PGN or decisions) and refused requests do not
+   count.
+4. A new game that replaces a game of its own client (rule 1, or the first choice of rule 2)
+   keeps that game's time: it may be taken when that game could have been, or when a game
+   created now could be if that is sooner (at once if that game could be taken already). So
+   starting new games, and making a first move in each, never keeps a slot; only play that
+   costs engine time does.
+5. If no game qualifies, the new game is refused with 503 (`max_sessions`). The check runs
+   before the new game's agent is built, so a refusal costs no engine time.
+
+So, on a full table, an unfinished game of a client below its share is taken for someone
+else's new game only when nothing was played in it for 15 minutes while it is its player's
+move (once the player has moved in it), or for 5 minutes before the player's first move or
+while CCA's move is not being made: not asked for, or asked for and refused by a limit (the
+page asks again by itself, but only a decision made counts; while a request for it waits for
+the engine or decides, the game is not taken). Before CCA's first decision in a game, its 5
+minutes run from its creation (or from the time rule 4 gave it), whatever the player does.
+The 404 then gives the reason
+([Limits and refusals](#limits-and-refusals), [A dropped game](#what-a-visitor-sees)).
+
+These rules count games by client key. Visitors who share a key (behind a proxy with
+`--trusted-proxies 0`, or with N too small: [Client address](#client-address)) are one client
+to them: together they hold at most *q* games, and once they hold *q*, rule 1 lets a new game
+of any of them drop the least recently used of their games at once, with free slots and while
+it is in play ([Shared quotas](#residual-risks)).
+
+With `--session-idle-minutes`, a game that no request has touched for that long is dropped.
+For this rule every request for a game touches it, reading its state included. Without a
+per-client limit, the least recently used game is dropped, as in local use.
+
+### What a visitor sees
+
+The page words each refusal in the visitor's language (the strings are in
+[`static/js/i18n.js`](../src/cca/play/static/js/i18n.js)). A wait is shown in whole seconds
+below two minutes, else in minutes rounded up.
+
+| Refusal | Message on the page (English) |
+|---|---|
+| `decisions_per_minute`, or any 429 without a known limit | "Slow down a little: this public demo allows a limited number of CCA moves per minute. Try again in *wait*." |
+| `reads_per_minute` | "Slow down a little: this public demo limits how often a game's moves and CCA's reasons are downloaded. Try again in *wait*." |
+| `requests_at_once` | "You already have requests waiting for CCA. Try again in *wait*, once they are done." |
+| `max_queue`, `max_connections`, or a 503 with `Retry-After` and no known limit | "The CCA server is busy with other players' games. Try again in *wait*." |
+| `max_connections_per_peer` | "Too many connections from your network to this public demo (other tabs or devices?). Try again in *wait*." |
+| `max_sessions` | "No free game slot: all games this public demo can hold are in use. Try again in *wait*." |
+| `game_busy` | "This game is still busy with an earlier request (CCA is thinking, perhaps in another tab). Try again in *wait*." |
+
+- **CCA's move is asked for again by itself.** When the request for CCA's move is refused by a
+  limit (a `limit` and a `Retry-After`), the page waits and asks again:
+  - each wait is the server's `Retry-After`, bounded to 1-60 seconds;
+  - it keeps asking for up to 15 minutes after the first refusal in a row (a wait that would
+    end later is not started);
+  - meanwhile the status line reads "CCA's move is waiting for the busy server; the page asks
+    again shortly.", and a message says "CCA cannot move yet: this public demo is busy or
+    limits CCA moves per minute. The page asks again by itself in *wait*.";
+  - a new game or a take-back cancels the wait.
+- **Timed games.** CCA's clock keeps running while its move waits, as it does while CCA waits
+  for the engine ([Clock rules](#clock-rules)). A long wait can make CCA lose on time.
+- **"Ask CCA to move".** When CCA is to move and nothing is asking for its move (15 minutes of
+  refusals have passed, or the request failed for another reason: an engine error, a server
+  shutting down, a lost connection), the Game card shows "CCA's move did not arrive." with a
+  button **Ask CCA to move**, and the page's live region announces it once, without moving the
+  focus. The button asks once more; a new refusal by a limit starts a new 15-minute period of
+  automatic retries.
+- **Nothing else is retried by itself.** A refused move of yours is shown as a message and the
+  piece goes back; a refused take-back, resignation, position-lab analysis or PGN copy is shown
+  as a message. The New game dialog shows the sentence of the table instead of the server's
+  message.
+- **The first game.** When the page opens without a game to resume and the new game is refused
+  by a limit with a `Retry-After` of at most 60 seconds (a busy engine, say, or a full table
+  whose next slot frees soon), the page tries again by itself for up to 15 minutes, and the
+  status line gives the refusal's sentence from the table followed by "No game is open yet:
+  the page tries again by itself in *wait*." A wait over 60 seconds (a full table often gives
+  one) or another failure ends the status line with "No game is open: "New game" starts one."
+  instead.
+- **A dropped game.** A game dropped by idle expiry, by the rules of [Game slots](#game-slots)
+  or by a restart answers 404. A reload then starts a new game, as in local use.
+
+### Behind a reverse proxy
+
+`cca play` has no TLS and no authentication in public mode either: the proxy of the hosting
+platform terminates HTTPS, and anyone who reaches the page can play. Everything under
+[Security model](#security-model) still holds, with the changes below.
+
+#### Client address
+
+The per-client limits count requests under a key derived from the client's address:
+
+- **`--trusted-proxies 0`** (the default): the TCP peer. `X-Forwarded-For` is ignored. Behind a
+  proxy the peer is the proxy, so every visitor who comes through the same proxy address shares
+  one set of quotas, games included ([Shared quotas](#residual-risks)); the start-up notice
+  says so. This over-limits, but no visitor can choose its own key.
+- **`--trusted-proxies N`**: the `X-Forwarded-For` entry N hops from the right, all header lines
+  read in order as one list. Each proxy appends the address it received the request from, so
+  only the N rightmost entries were written by the trusted proxies; entries further left come
+  from the client and may be forged.
+  - Set N to exactly the number of proxies that append to the header. Too small: the key is a
+    proxy's address, and visitors share quotas. Too large: a visitor chooses its own key by
+    sending the header, and escapes its limits.
+  - When the header is missing, has fewer than N entries, or that entry is not a bare IP
+    address (a port, `unknown`, a name), the TCP peer is used.
+- `X-Real-IP`, `Forwarded` and `X-Forwarded-Host` are never read.
+- An IPv6 client is counted by its /64 block, the block a subscriber usually gets, so rotating
+  addresses inside it does not multiply a quota. An IPv4-mapped IPv6 address counts as its IPv4
+  address.
+
+#### Host, origin and framing
+
+- **Host check.** The `--allowed-host` names are answered in addition to the names of a
+  non-loopback bind: `localhost`, any IP address and the machine's host name. Any other `Host`
+  gets 421, so the DNS-rebinding guard stays on. A platform whose health checks send the public
+  name as `Host` needs that name as an `--allowed-host`, or its checks get 421.
+- **POST origin check.** Besides `http://<Host>` and `https://<Host>`, the origin
+  `https://<name>` of every `--allowed-host` is accepted, for proxies that rewrite `Host`.
+  `Sec-Fetch-Site: cross-site` still gets 403, and bodies must still be `application/json`.
+- **Framing.** Without `--frame-ancestor` the page cannot be framed: CSP `frame-ancestors 'none'`
+  and `X-Frame-Options: DENY`. With it, the CSP says `frame-ancestors` followed by the given
+  origins, and `X-Frame-Options` is left out, because its `ALLOW-FROM` form is obsolete and
+  `DENY` would still block the frame. The rest of the Content-Security-Policy is unchanged.
+
+#### Threads and request bodies
+
+With `--max-connections` (on in public mode) the server bounds its threads:
+
+- at most that many connections are handled at once, one thread each. A connection that gave
+  up its place (below) keeps its thread until it notices, within 0.5 seconds, so briefly up to
+  a quarter more threads run (at least 2; 16 at the default 64). A newcomer whose address holds
+  its fair share of the places or more (the bound divided by the number of addresses holding
+  places, its own counted) may use only half of that extra (8 at the default 64): addresses
+  that flood a full server, one or a few, churn their own places and leave the rest of the
+  extra to the others;
+- a connection's request head (request line and headers) must arrive within 10 seconds of the
+  connection's start, however slowly it trickles in; otherwise the connection is closed without
+  an answer;
+- when every place is taken, a connection that has waited more than 0.5 seconds for its head
+  gives its place to the newcomer (it is closed within 0.5 seconds), so idle or trickling
+  connections cannot keep others out. Failing that, for a newcomer from another address, the
+  address holding the most places gives up its oldest connection that has waited 0.05 seconds
+  for its head, with nothing arrived that its thread has yet to read (so a head a proxy sends
+  at once is never cut off), if that address holds more than its fair share (the newcomer's
+  address counted among those holding places) and at least 2 places more than the newcomer's
+  address. So addresses that replace their connections faster than they grow stale cannot keep
+  everyone else out. Without such a connection, or while the extra threads above are taken by
+  connections closing, the newcomer is answered 503 (`max_connections`) at once by the
+  accepting thread; one helper thread keeps the refused connection open for up to 2 seconds
+  and discards what the client still sends, so that the client can read the 503;
+- with `--max-connections-per-peer` N (off unless given, also in public mode; only with
+  `--trusted-proxies 0`), one address (an IPv6 /64 as one) has at most N connections counted at
+  once, whatever they are doing: a head on its way, a body, or an answer it reads slowly (each
+  write waits at most 30 seconds, `PlayHandler.timeout`). Connections that gave up their place
+  and have yet to close count too. One more is answered 503 (`max_connections_per_peer`) at
+  once, in the same way. Only a connection still waiting for its head gives its place to a
+  newcomer, so this cap is what keeps one address from holding every thread past its heads. It
+  is for a server that clients reach directly: behind a proxy every connection has the proxy's
+  address, trusted or not, and the cap would hold for the whole site;
+- the route and the method are checked before any body is read (404 and 405 at once);
+- one client has at most 8 API requests in progress (one more: 429), and each body must arrive
+  within 10 seconds (408 otherwise);
+- the unread body of a refused request is read away for at most 2 seconds, within the client's
+  own places; beyond them only what has already arrived is discarded;
+- at most 2 requests wait for a game that a `/think` holds (one more: 409 `game_busy`);
+- the server speaks HTTP/1.0: one request per connection, so no connection idles between
+  requests.
+
+#### Residual risks
+
+- **Game slots.** Clients below their share keep the games they keep playing, so the table
+  can be held in two ways; newcomers then get 503 (`max_sessions`) for as long as it lasts:
+  - **by playing:** `--max-sessions` / (*q* - 1) addresses, each below its share with *q* - 1
+    games (6 addresses for the Render Blueprint's 12 slots at the default *q* = 3; an IPv6 /56
+    holds 256 /64 blocks), play each game: a CCA decision, then within 900 seconds a move of
+    their own, then within 300 seconds the next CCA decision. One decision and one move per
+    game every 1,200 seconds (300 + 900) are enough. That costs engine time, which other
+    visitors wait for in the engine's line, and a small part of each address's
+    `--decisions-per-minute` budget; the moves cost nothing, and reading the games holds
+    nothing;
+  - **without engine time:** `--max-sessions` + 1 addresses each start a game as soon as one
+    may be reclaimed, each from an address whose own game has just gone, so that the new game
+    counts as played and is kept 300 seconds: one new game per slot every 300 seconds keeps
+    most newcomers out. Restarting one's own games, or making a first move in them, holds
+    nothing (rules 3 and 4 of [Game slots](#game-slots)).
+
+  The defence is a table larger than an attacker can fill: `--max-sessions` above the number
+  of addresses it can use without engine time, or *q* - 1 times that with engine time.
+- **Connections.** One address, or a few, cannot keep others out with idle or trickling
+  connections ([Threads](#threads-and-request-bodies)). Many addresses, each holding about its
+  fair share of the places (a few dozen at the default 64, with a place or two each), can, and
+  so can one client behind a proxy or port forwarder that passes idle connections through
+  (everyone there shares its address). Against those only a front that buffers request heads
+  helps: a hosting platform's edge or a reverse proxy. Only a connection still waiting for its
+  head gives its place up, so without `--max-connections-per-peer` nothing keeps one address
+  from holding places past its heads, for example by reading the answers slowly (each write may
+  wait up to 30 seconds); that cap is only for a server that clients reach directly.
+- **Creating games** has no rate limit of its own: it costs no decision token. It is bounded by
+  `--max-sessions-per-client` and waits in the engine line.
+- **Shared quotas.** With `--trusted-proxies 0` behind a proxy, or N too small, the key is a
+  proxy's address, and every visitor who comes through that address is one client (possibly
+  all visitors). The Render Blueprint ships this way until the client address is
+  [calibrated](deploy.md#calibrating-the-client-address). Every per-client bound then holds for
+  all of them together:
+  - **games:** at most `--max-sessions-per-client` games (3 in public mode) for all of them,
+    whatever `--max-sessions` is. Once they hold that many, a new game of any of them drops
+    the least recently used of their games at once (rule 1 of [Game slots](#game-slots)), with
+    free slots and while it is in play, so the protection of a game in play (5 or 15 minutes
+    without play, rule 2) does not apply; the visitor whose game it was gets 404
+    ([A dropped game](#what-a-visitor-sees));
+  - **decisions and reads:** one `--decisions-per-minute` and one `--reads-per-minute` budget
+    for all of them, so one busy visitor can use up the decisions of everyone;
+  - **the engine's line:** 2 waiting places for all of them (besides the decision running),
+    served in arrival order rather than in turn; one more request while both are taken gets
+    429 `requests_at_once`, whose message ("You already have requests waiting for CCA") speaks
+    of requests that may be another visitor's;
+  - **requests in progress:** at most 8 API requests for all of them (with
+    `--max-connections`, on in public mode; 429 beyond);
+  - **connections:** `--max-connections-per-peer`, if it were set behind such a proxy, would
+    hold for all of them together, which is why it is only for a server that clients reach
+    directly.
+- **Game ids are bearer secrets.** Anyone who knows a game's id can read and play it. Ids are
+  random, never listed and never logged.
+- **The proxy.** How the platform's proxy buffers slow clients, and which headers it adds (for
+  example CORS headers, which `cca play` never sends itself), is outside `cca play`. What was
+  observed on Hugging Face Spaces is in [deploy.md](deploy.md).
+- **Load.** Public mode was not load-tested ([Limits](#limits)).
+
+### Privacy
+
+- **No address is written anywhere.** The client key (an IPv4 address, an IPv6 /64 prefix, or
+  the TCP peer when neither applies) lives only in the server's memory:
+  - in the two rate tables (decisions, reads), as a token count and a time per client, for at
+    most 4096 clients each; when a table grows beyond that, it is pruned to 3072 clients:
+    clients whose budget is full again go first, then the least recently active ones;
+  - in the engine's waiting line: the places of waiting clients, and the last turn of at most
+    256 clients;
+  - as the owner of each game, for as long as the game is kept;
+  - in the counters of requests in progress, until each request ends;
+  - with `--max-connections`, as the TCP peer (an IPv6 /64 prefix, or the IPv4 address) of each
+    connection counted, until the connection ends. Behind a proxy that is the proxy's
+    address.
+
+  Nothing of it is written to disk, and a restart forgets all of it. No response contains it;
+  `/api/info` shows only the limits and the number of requests waiting.
+- **Request log.** Public mode writes one line per request to standard error: UTC time, method,
+  route template, status and duration, for example
+  `2026-09-29T08:15:02Z POST /api/games/:id/think 200 2731ms`. The line has no address, no game
+  id (`:id` stands for it), no query string, no header and no body. `-` stands for a value that
+  does not exist (a connection refused by `--max-connections` or `--max-connections-per-peer` is
+  logged as `- - 503 -ms`), and
+  ` aborted` marks a request whose client went away before its answer. With
+  `--log-forwarded-hops` the line ends with `xff=N`, the number of `X-Forwarded-For` entries,
+  never an entry (`xff=-` when no request head was read).
+- **Other output.** The standard library's own access log, which includes the address, is
+  never written, in any mode. In public mode the report of an unexpected error leaves out the
+  client address too.
+- **Games** (moves, seeds, decisions) are kept in memory like every game and are gone after a
+  restart.
+- **In the browser**, the page keeps the game id per tab and the New game dialog's choices, as
+  in local use. The server sets no cookies.
+- **Outside `cca play`:** the hosting platform and its proxies see every visitor's address and
+  may keep logs of their own. `cca play` does not control them; the platform's own policy
+  applies.
+
+### Operating a public instance
+
+- **Run one instance.** Games, quotas and the engine's waiting line live in the memory of one
+  process. Do not run several instances or replicas behind a load balancer: a game created on
+  one instance is unknown (404) to the others, and each instance would count its own limits.
+- **Restarts lose every game.** A redeploy, a restart or a host that stops idle instances (as
+  free tiers do) drops all games in progress; the page then starts a new game. A shutdown
+  (SIGTERM, as a platform sends it) refuses the waiting requests at once and stops a running
+  decision early.
+- **`--human qre` on a small host.** Maia-2 needs PyTorch (the `-maia2` image) and downloads
+  its checkpoint (about 280 MB) on first use; on a host without persistent disk it does so again
+  after every restart.
+- **Speed.** One engine serves every visitor in turn, and each decision costs several engine
+  searches of `--nodes` nodes. On the development machine a decision at the default 200,000
+  nodes took a few seconds ([Limits](#limits)); a smaller host is slower, by an amount this guide
+  does not measure. `--max-think-seconds` bounds each decision's search time and `--max-queue`
+  the length of the line. A lower `--nodes` or cap makes decisions faster but measures `q_opt`
+  more coarsely, which changes CCA's play: a demo's decisions are not comparable with research
+  runs made with other settings.
+- **Memory.** `--max-sessions` caps the games of all visitors together, and `--hash` sets the
+  engine's table size. The memory one game needs was not measured.
+- **Finding `--trusted-proxies`.** When the platform does not document how many proxies append
+  to `X-Forwarded-For`, start with `--trusted-proxies 0 --log-forwarded-hops`, use the page, and
+  read the `xff=N` of the page's own requests (`/api/...`) in the log, not of `/healthz` (health
+  checks may come from inside the platform). The smallest N seen is the number of proxies: set
+  `--trusted-proxies` to it and restart. The start-up notice's "Client address" line shows the
+  setting in force. Until then visitors share their limits, games included
+  ([Shared quotas](#residual-risks)): calibrate before announcing the demo.
+- **Health checks.** `/healthz` answers a `Host` that is an IP address, `localhost` or an
+  `--allowed-host`. When all `--max-connections` connections are taken, a health check can get
+  the 503 too; allow for that in the platform's health-check settings, or raise the limit.
+- **Watching.** The request log shows whether the limits bite: many 429 and 503 lines mean
+  visitors are being refused. If the demo is overwhelmed, stop or pause it; only games in
+  progress are lost.
 
 ## Vendored browser files and licences
 
@@ -750,5 +1251,7 @@ is loaded from a CDN.
   `style-src-attr` was not checked. Screen readers were not tested.
 - **Load:** many simultaneous sessions were not load-tested. The concurrency tests ran up to
   ten parallel requests.
-- **Exposure:** the server is not built for exposure beyond your own machine (see
-  [Security model](#security-model)).
+- **Exposure:** without public mode, the server is not built for exposure beyond your own
+  machine (see [Security model](#security-model)). A public demo needs
+  [Public mode](#public-mode), whose own known limits are listed under
+  [Residual risks](#residual-risks).

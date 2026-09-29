@@ -1,0 +1,115 @@
+name: Deploy Render
+
+# Public demo on Render's free plan: the web service that deploy/render/render.yaml defines runs a
+# released image, ghcr.io/donquaan/cca:<version>, pinned by digest (docs/deploy.md). This workflow
+# builds nothing and holds no Render API key: it checks that the version's image exists, sends
+# the service's deploy hook (the secret RENDER_DEPLOY_HOOK_URL) a request with imgURL set to that
+# image by digest ("you can optionally specify a tag or digest by appending an imgURL query
+# parameter to the deploy hook URL", https://render.com/docs/deploying-an-image), then polls
+# RENDER_URL/healthz until the version answers with its engine ready. The service must exist
+# (docs/deploy.md: created from the Blueprint) before the first run.
+#
+# - workflow_dispatch: deploy any released version (default: the latest release); also rollback.
+# - release published: a release published by a person or another token. release.yml publishes
+#   with GITHUB_TOKEN, and events caused by GITHUB_TOKEN start no workflow run
+#   (https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow),
+#   so an automated release needs a manual run, or a job in release.yml that calls this file
+#   (workflow_call, `secrets: inherit`). Pre-releases are never deployed by the release event.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy, e.g. 0.2.0 or v0.2.0 ("latest": the latest release)'
+        type: string
+        required: true
+        default: latest
+  workflow_call:
+    inputs:
+      version:
+        description: Version to deploy, e.g. 0.2.0 or v0.2.0
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # -e and -o pipefail
+
+# Every ${{ }} value reaches a script through env, never pasted into the script's text. The hook
+# URL is in the environment of the trigger step only, where the helper reads it and never prints
+# it; the settings check sees just whether it is set.
+jobs:
+  deploy:
+    name: deploy to the Render web service
+    if: ${{ github.event_name != 'release' || !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # RENDER_DEPLOY_HOOK_URL belongs in this environment's secrets: its deployment rules (main
+    # and v* tags, an optional reviewer) then decide which runs may use it (docs/deploy.md).
+    environment: render
+    # One deploy at a time: a newer one waits, it never cancels a deploy in flight.
+    concurrency:
+      group: deploy-render
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # nothing here pushes to GitHub
+          fetch-tags: true # the version's tag must ship deploy/render/render.yaml
+      - name: Check the deploy settings (secret RENDER_DEPLOY_HOOK_URL, variable RENDER_URL)
+        env:
+          RENDER_URL: ${{ vars.RENDER_URL }}
+          HOOK_PRESENT: ${{ secrets.RENDER_DEPLOY_HOOK_URL != '' }}
+        run: >-
+          python3 deploy/render/service.py check-config --url "$RENDER_URL"
+          --hook-present "$HOOK_PRESENT"
+      # The helper writes its errors to stderr: x=$(...) keeps only stdout, the log shows both.
+      - name: Version to deploy
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
+        run: |
+          if [ "$REQUESTED" = latest ]; then
+            REQUESTED=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          fi
+          version=$(python3 deploy/render/service.py version "$REQUESTED")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Deploying CCA $version"
+      # The hook deploys an image and names no command: the service keeps the Docker command of
+      # its last Blueprint sync. A release's own tests parsed its Blueprint's command with its
+      # own cca before its image was pushed, so the version's tag must ship deploy/render/
+      # render.yaml, and its command must pass every option that the Blueprint here passes (this
+      # run's ref: run it from main, the branch the Blueprint syncs from). Otherwise, as for a
+      # rollback past an added option, its container could stop at start with "unrecognized
+      # arguments": it is refused before Render is asked. On a release event the ref is the
+      # release's own tag, so this passes by construction.
+      - name: The version knows every option of the Blueprint's command here
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: python3 deploy/render/service.py blueprint-check "$VERSION"
+      - name: Image digest (anonymous pull from ghcr.io; fails if the tag does not exist)
+        id: digest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          digest=$(python3 deploy/render/service.py digest "$VERSION")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "ghcr.io/donquaan/cca:$VERSION@$digest"
+      - name: Trigger the deploy hook with the image pinned by digest
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: python3 deploy/render/service.py trigger "$DIGEST"
+      - name: Wait until the service serves the version, engine ready (up to 10 minutes)
+        env:
+          RENDER_URL: ${{ vars.RENDER_URL }}
+          VERSION: ${{ steps.version.outputs.version }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: |
+          python3 deploy/render/service.py wait "$RENDER_URL" "$VERSION" --timeout 600 --interval 15
+          echo "Deployed CCA $VERSION (ghcr.io/donquaan/cca@$DIGEST) to $RENDER_URL" >> "$GITHUB_STEP_SUMMARY"

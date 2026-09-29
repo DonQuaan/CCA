@@ -15,6 +15,7 @@ STATIC = Path(__file__).resolve().parents[2] / "src" / "cca" / "play" / "static"
 CSS = (STATIC / "css" / "app.css").read_text(encoding="utf-8")
 HTML = (STATIC / "index.html").read_text(encoding="utf-8")
 BOARD_JS = (STATIC / "js" / "board.js").read_text(encoding="utf-8")
+MAIN_JS = (STATIC / "js" / "main.js").read_text(encoding="utf-8")
 
 TEXT_TOKENS = ("--text", "--muted", "--bad", "--warn", "--good", "--accent")
 SURFACES = ("--bg", "--surface", "--surface-2", "--surface-3", "--accent-soft")
@@ -80,3 +81,26 @@ def test_scrollable_candidate_table_is_keyboard_reachable() -> None:
     label = re.search(r'aria-labelledby="([^"]+)"', attrs)
     assert label is not None
     assert f'id="{label.group(1)}"' in HTML
+
+
+def test_the_ask_banner_is_announced_when_it_appears() -> None:
+    # The "Ask CCA to move" banner appears without the focus moving to it: a status message
+    # must reach assistive technology anyway (WCAG 4.1.3), through the page's polite live
+    # region, once, when the banner goes from hidden to shown (not on every render).
+    announcer = re.search(r"<div ([^>]*)id=\"announcer\"([^>]*)>", HTML)
+    assert announcer is not None
+    attrs = announcer.group(1) + announcer.group(2)
+    assert 'aria-live="polite"' in attrs
+    assert 'aria-atomic="true"' in attrs
+    assert re.search(r'<div class="ask-banner" id="ask-banner" hidden>', HTML)
+    render = MAIN_JS.split("function renderControls() {", 1)[1].split("\n}\n", 1)[0]
+    shown = re.search(
+        r'const ask = \$\("ask-banner"\)\n\s*const asking = canAsk\(ui\)\n'
+        r"\s*if \(asking && ask\.hidden\) "
+        r'announce\(`\$\{t\("ask_text"\)\} \$\{t\("ask_cca"\)\}\.`\)\n'
+        r"\s*ask\.hidden = !asking",
+        render,
+    )
+    assert shown, render
+    announce = MAIN_JS.split("function announce(text) {", 1)[1].split("\n}\n", 1)[0]
+    assert '$("announcer")' in announce

@@ -1,0 +1,62 @@
+# Render Blueprint of the public CCA demo: one free web service running a released image.
+# docs/deploy.md (section "Render") has the owner's steps, the deploy workflow and the sources.
+#
+# - runtime: image. Render pulls ghcr.io/donquaan/cca and builds nothing
+#   (https://render.com/docs/deploying-an-image). The tag is this commit's package version
+#   (src/cca/__init__.py; docker/tests/test_deploy_render.py checks it). On a release commit
+#   that is the release being made, whose command line the command below was tested against;
+#   between two releases it is the previous release, whose command line may lack options that
+#   the command already passes. A Blueprint sync or a manual deploy from the dashboard starts
+#   this tag with this command: sync only when `python deploy/render/service.py blueprint-check`
+#   passes (docs/deploy.md). .github/workflows/deploy-render.yml deploys a release pinned by
+#   digest through the service's deploy hook, which changes the image and keeps the command of
+#   the last sync; it runs the same check against the release first.
+# - plan: free must be written out: the Blueprint default for a web service is a paid plan
+#   (https://render.com/docs/blueprint-spec; its plans table gives free 0.1 CPU and 512 MB).
+#   Free also means one instance, spun down after 15 minutes without traffic
+#   (https://render.com/docs/free).
+# - region cannot be changed after the service exists (https://render.com/docs/blueprint-spec).
+#   singapore is Render's region nearest to Vietnam; change it before the first sync if the
+#   visitors are elsewhere.
+# - PORT: Render routes traffic to the port in PORT, 10000 unless PORT is set
+#   (https://render.com/docs/web-services#port-binding). 8765 is the image's EXPOSE, the port of
+#   its HEALTHCHECK and the local default; --port repeats it literally because the docs do not
+#   say whether Render expands $PORT inside dockerCommand.
+# - healthCheckPath: /healthz answers 200 while the engine starts and once it is ready, 503 if
+#   it failed. Render's checks send the service's own host name as Host (a verified custom
+#   domain, else the onrender.com one; https://render.com/docs/health-checks): that name must
+#   be an --allowed-host, or the Host guard answers 421 and the deploy never goes live.
+#
+# dockerCommand is the "custom Docker CMD" (https://render.com/docs/deploying-an-image): the
+# arguments after the image's ENTRYPOINT ["/usr/bin/tini", "--", "cca"]. That Render keeps the
+# ENTRYPOINT is not documented; docs/deploy.md says what to do if the first deploy shows
+# otherwise. Plain words only, no quotes or $: the words are the same whether Render splits the
+# string on spaces or hands it to a shell. The four lines fold into one:
+#   1. public mode on all interfaces at the port above, the QRE human model (no Maia-2);
+#   2. an engine budget for 0.1 CPU: Stockfish hash 16 MB, 1 thread, 20000 nodes per
+#      evaluation; 12 games in memory; a CCA decision capped at 20 seconds;
+#   3. the service's public host name. Render derives it from the service name and may add a
+#      suffix: after the first deploy, write the real one here (docs/deploy.md);
+#   4. the CLIENT-IP line: how the per-visitor limits find a visitor's address. As shipped,
+#      X-Forwarded-For is ignored (visitors behind the same proxy address, possibly all of
+#      them, share one quota: over-limiting, never spoofable) and each request log line counts
+#      the header's entries; calibrate it after the first deploy (docs/deploy.md).
+# No --frame-ancestor: nothing shows the demo in a frame on Render.
+services:
+  - type: web
+    name: cca-demo
+    runtime: image
+    image:
+      url: ghcr.io/donquaan/cca:0.2.0
+    plan: free
+    region: singapore
+    numInstances: 1
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: "8765"
+    dockerCommand: >-
+      play --public --host 0.0.0.0 --port 8765 --no-browser --human qre
+      --hash 16 --threads 1 --nodes 20000 --max-sessions 12 --max-think-seconds 20
+      --allowed-host cca-demo.onrender.com
+      --trusted-proxies 0 --log-forwarded-hops

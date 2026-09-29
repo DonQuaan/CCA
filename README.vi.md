@@ -20,10 +20,10 @@ một trình mô phỏng trên trình duyệt hiển thị trực tiếp các t�
 như một engine UCI trong các phần mềm cờ (GUI) và lichess-bot, và tìm hiểu từng cơ chế: cơ chế nào
 cũng được ghi lại kèm công thức và tình trạng khoa học của nó.
 
-> **Tình trạng nghiên cứu (v0.1.0).** Kiến trúc đã được hiện thực và kiểm thử. Các tuyên bố về
+> **Tình trạng nghiên cứu (v0.2.0).** Kiến trúc đã được hiện thực và kiểm thử. Các tuyên bố về
 > hành vi của nó (giống người, khó đoán, giăng bẫy người chơi) là **giả thuyết**, kèm tiêu chí
 > bác bỏ được đăng ký trước trong
-> [`docs/science.md`](docs/science.md#2-pre-registered-falsifiable-predictions); v0.1.0 không báo
+> [`docs/science.md`](docs/science.md#2-pre-registered-falsifiable-predictions); v0.2.0 không báo
 > cáo kết quả nào cho các giả thuyết đó. "Căng thẳng" (stress) và "động lực" (drive) là các biến
 > điều khiển ảo *lấy cảm hứng từ* sinh lý học con người, không phải mô hình sinh lý
 > ([ADR-0005](docs/adr/0005-honest-science-labelling.md)). Các tham số được đặt thủ công đều mang
@@ -62,32 +62,33 @@ diện tiếng Anh, nền tối: [`docs/img/cca-play-dark.png`](docs/img/cca-pla
 
 ## Bắt đầu nhanh
 
-Có ba cách chạy CCA 0.1.0. Cách nào cũng cần Stockfish 19; chỉ các container image có sẵn nó.
+Có ba cách chạy CCA 0.2.0. Cách nào cũng cần Stockfish 19; chỉ các container image có sẵn nó.
 Nếu các tệp phát hành hoặc các image chưa có (HTTP 404, hoặc `docker pull` trả về `denied`), hãy
-dùng [3. Từ mã nguồn](#3-từ-mã-nguồn).
+dùng [3. Từ mã nguồn](#3-từ-mã-nguồn). Một bản demo trực tuyến công khai đang được dựng; xem
+[Demo trực tuyến](#demo-trực-tuyến).
 
 ### 1. Docker (chỉ cần Docker)
 
 Bạn cần Docker (Docker Desktop trên Windows và macOS). Image nằm trên GitHub Packages, **chỉ cho
 linux/amd64**: không có image arm64, và trên máy arm64, Docker có thể chạy chúng qua giả lập
-(chưa kiểm thử). `ghcr.io/donquaan/cca:0.1.0` (cũng là `latest`) chứa CCA, Stockfish 19 và mô hình
-QRE, và chạy `cca play --host 0.0.0.0 --port 8765 --no-browser --human qre`; `:0.1.0-maia2` (cũng
+(chưa kiểm thử). `ghcr.io/donquaan/cca:0.2.0` (cũng là `latest`) chứa CCA, Stockfish 19 và mô hình
+QRE, và chạy `cca play --host 0.0.0.0 --port 8765 --no-browser --human qre`; `:0.2.0-maia2` (cũng
 là `latest-maia2`) bổ sung Maia-2 0.11 trên PyTorch 2.8.0 bản chỉ CPU và chạy trình mô phỏng với
 `--human maia2 --device cpu`.
 
 ```bash
 # Trình mô phỏng trên trình duyệt: mở http://127.0.0.1:8765/ khi container báo healthy
-docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/donquaan/cca:0.1.0
+docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/donquaan/cca:0.2.0
 
 # Engine UCI qua stdin/stdout: dùng -i nhưng không bao giờ dùng -t; không có web server nào chạy nên không có health check
-docker run -i --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci
+docker run -i --rm --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci
 
 # Maia-2: checkpoint rapid (khoảng 280 MB, 267 MiB) được tải ở lần khởi động đầu tiên vào volume cca-data
-docker run --rm -p 127.0.0.1:8765:8765 -v cca-data:/data ghcr.io/donquaan/cca:0.1.0-maia2
-docker run -i --rm --no-healthcheck -v cca-data:/data ghcr.io/donquaan/cca:0.1.0-maia2 uci
+docker run --rm -p 127.0.0.1:8765:8765 -v cca-data:/data ghcr.io/donquaan/cca:0.2.0-maia2
+docker run -i --rm --no-healthcheck -v cca-data:/data ghcr.io/donquaan/cca:0.2.0-maia2 uci
 
 # Kiểm tra môi trường (phiên bản, banner của Stockfish)
-docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 doctor
+docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.2.0 doctor
 ```
 
 - Chỉ mở (publish) cổng trên `127.0.0.1`: bên trong container, server lắng nghe trên `0.0.0.0` và không
@@ -108,7 +109,7 @@ docker run --rm --no-healthcheck ghcr.io/donquaan/cca:0.1.0 doctor
 Cần Python 3.11–3.13 (đã kiểm thử; 3.11 hoặc 3.12 nếu dùng Maia-2). Trên Windows, hãy cài Python
 từ [python.org](https://www.python.org/downloads/); trên Debian hoặc Ubuntu, nếu `venv` báo lỗi,
 hãy cài gói `python3-venv` mà thông báo lỗi nêu tên. Wheel
-[`cca_chess-0.1.0-py3-none-any.whl`](https://github.com/DonQuaan/CCA/releases/tag/v0.1.0)
+[`cca_chess-0.2.0-py3-none-any.whl`](https://github.com/DonQuaan/CCA/releases/tag/v0.2.0)
 **không** chứa Stockfish: hãy tự cài bản build chính thức `sf_19` và đối chiếu nó với các mã
 SHA-256 được ghim trong [`engines/stockfish.lock.json`](engines/stockfish.lock.json).
 
@@ -116,7 +117,7 @@ Linux:
 
 ```bash
 python3.13 -m venv cca-env      # hoặc python3.11 / python3.12
-cca-env/bin/python -m pip install https://github.com/DonQuaan/CCA/releases/download/v0.1.0/cca_chess-0.1.0-py3-none-any.whl
+cca-env/bin/python -m pip install https://github.com/DonQuaan/CCA/releases/download/v0.2.0/cca_chess-0.2.0-py3-none-any.whl
 
 curl -LO https://github.com/official-stockfish/Stockfish/releases/download/sf_19/stockfish-linux-x86-64-universal.tar.gz
 echo "9defc0d4e55d49c65a6d042f3e571a39fcea499ade6dbe741b53b8c65e03611f  stockfish-linux-x86-64-universal.tar.gz" | sha256sum -c -
@@ -136,7 +137,7 @@ Windows (PowerShell):
 
 ```powershell
 py -3.13 -m venv cca-env        # hoặc -3.11 / -3.12
-.\cca-env\Scripts\python -m pip install https://github.com/DonQuaan/CCA/releases/download/v0.1.0/cca_chess-0.1.0-py3-none-any.whl
+.\cca-env\Scripts\python -m pip install https://github.com/DonQuaan/CCA/releases/download/v0.2.0/cca_chess-0.2.0-py3-none-any.whl
 
 curl.exe -LO https://github.com/official-stockfish/Stockfish/releases/download/sf_19/stockfish-windows-x86-64-universal.zip
 if ((Get-FileHash stockfish-windows-x86-64-universal.zip -Algorithm SHA256).Hash -ne '3C8BF1F9EA66A09350A40DF4F632288285AC206D99F33AB5842C408FC30B48A7') { throw 'SHA-256 mismatch' }
@@ -171,7 +172,7 @@ Python 3.10–3.12; trên 3.13, extra `maia2` không cài gì cả). Trên Windo
 1. `py -3.12 -m venv cca-maia2`
 2. Chỉ khi có GPU NVIDIA (wheel `torch` trên PyPI cho Windows chỉ chạy CPU):
    `.\cca-maia2\Scripts\python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128`
-3. `.\cca-maia2\Scripts\python -m pip install "cca-chess[maia2] @ https://github.com/DonQuaan/CCA/releases/download/v0.1.0/cca_chess-0.1.0-py3-none-any.whl"`
+3. `.\cca-maia2\Scripts\python -m pip install "cca-chess[maia2] @ https://github.com/DonQuaan/CCA/releases/download/v0.2.0/cca_chess-0.2.0-py3-none-any.whl"`
 
 Bước 2 phải làm trước: pip giữ nguyên một `torch==2.8.0` đã được cài, nên chạy lệnh CUDA sau bước
 3 sẽ không thay đổi gì. Nếu wheel CPU đã có sẵn, hãy chạy `python -m pip uninstall -y torch` trong
@@ -226,6 +227,53 @@ Lần dùng đầu tiên sẽ tải checkpoint rapid (khoảng 280 MB, 267 MiB) 
 lưu bằng `CCA_WEIGHTS`); `maia2` kiểm tra SHA-256 của tệp tải về, và CCA từ chối mọi checkpoint đã
 có sẵn mà SHA-256 khác với mã ghim của CCA.
 
+### Demo trực tuyến
+
+Một bản demo công khai của `cca play` trên gói dịch vụ lưu trữ (hosting) miễn phí đang được dựng;
+địa chỉ của nó sẽ được thêm vào đây khi nó chạy. Bản demo dùng để thử trình mô phỏng, không dùng
+cho các lần chạy nghiên cứu, và có các giới hạn sau:
+
+- **Chậm.** Một engine duy nhất trên một máy nhỏ phục vụ lần lượt mọi người truy cập, và bạn có
+  thể phải chờ sau nước đi của người chơi khác. Trên máy phát triển, mỗi nước của CCA mất vài
+  giây với ngân sách engine mặc định (200 nghìn nút); bản demo tìm kiếm ít nút hơn trên một máy
+  của gói miễn phí, và thời gian mỗi nước đi ở đó chưa được đo. Các giới hạn về số nước đi của
+  CCA mỗi phút, số yêu cầu chờ engine và số chỗ chơi có thể từ chối một yêu cầu; khi nước đi của
+  CCA bị từ chối, trang tự hỏi lại, trong tối đa 15 phút.
+- **Lúc đầu, người truy cập dùng chung giới hạn.** Sau proxy của dịch vụ hosting, server chỉ
+  phân biệt được người truy cập khi đã được cho biết có bao nhiêu proxy đứng trước nó
+  ([hiệu chỉnh địa chỉ client](docs/deploy.md#calibrating-the-client-address), tiếng Anh). Trước
+  đó, server thấy địa chỉ của proxy chứ không phải của bạn, nên những người đi qua cùng một địa
+  chỉ proxy (có thể là tất cả mọi người) dùng chung một bộ giới hạn: tổng cộng 3 ván cùng lúc và
+  20 nước đi của CCA mỗi phút cho tất cả họ (mặc định của chế độ công khai), và khi đã có 3 ván,
+  một ván mới của bất kỳ ai trong số họ sẽ thay ngay ván đã lâu nhất không được dùng đến, kể cả
+  ván đang chơi dở.
+- **Thô hơn so với khi chạy cục bộ.** Để vừa với máy chủ, bản demo tìm kiếm với ngân sách engine
+  nhỏ hơn và giới hạn thời gian của mỗi quyết định, nên các phép đo của nó (`q_opt`, `q_human`,
+  giá trị bẫy) thô hơn, và các ván của nó có thể không phát lại được chính xác.
+- **Ngủ khi không có ai dùng.** Gói miễn phí dừng dịch vụ sau 15 phút không có lưu lượng, và lượt
+  truy cập kế tiếp phải chờ dịch vụ khởi động lại: khoảng một phút để nhà cung cấp hosting khởi
+  động dịch vụ ([Render: free instances](https://render.com/docs/free)), rồi thêm thời gian
+  engine tự khởi động trên máy đó, vốn chưa được đo.
+- **Ván cờ bị mất** khi dịch vụ ngủ, khởi động lại hoặc được triển khai lại: ván cờ chỉ nằm trong
+  bộ nhớ của server. Một ván không được dùng trong 30 phút (mặc định) sẽ bị xóa. Khi server đã
+  phân biệt được người truy cập, một ván bạn đang chơi chỉ bị nhường cho người mới đến khi mọi chỗ
+  chơi đều đã có người dùng, và khi đó chỉ khi trong ván không có nước nào được đi suốt 15 phút
+  lúc đến lượt bạn (sau khi bạn đã đi ít nhất một nước trong ván), hoặc suốt 5 phút lúc nước đi
+  của CCA đang chờ mà chưa được yêu cầu (hoặc bị một giới hạn từ chối) hay trước nước đi đầu tiên
+  của bạn, hoặc nếu bạn đang giữ 3 ván. Nước đi của CCA được tính là đang chơi, và nước đi của
+  bạn cũng vậy khi CCA đã đi ít nhất một nước trong ván (trừ một nước được đi lần nữa sau khi
+  bấm *Đi lại*); một ván mà CCA đang tính nước đi thì không bao giờ bị nhường. Trước khi server phân biệt được người truy cập, áp dụng các giới
+  hạn dùng chung ở trên.
+- **Chỉ có mô hình người QRE**, không có Maia-2: prior người của CCA và mô hình của CCA về bạn đều
+  lấy từ mô hình cơ sở QRE suy ra từ engine, nên nước đi và các con số của nó có thể khác với khi
+  chạy cục bộ bằng Maia-2. Như ở mọi nơi trong CCA, các con số là biến quyết định nội bộ của nó,
+  không phải phép đo về bạn.
+- Không cần tài khoản, không có cookie; server không ghi địa chỉ nào vào log (nhà cung cấp hosting
+  có thể giữ log riêng của họ).
+
+Cách triển khai: [`docs/deploy.md`](docs/deploy.md); các giới hạn và quy tắc về quyền riêng tư:
+[chế độ công khai](docs/simulator.md#public-mode) (tiếng Anh).
+
 ## Chơi trong trình mô phỏng
 
 `cca play` chạy một ứng dụng web cục bộ tại `127.0.0.1:8765` (HTTP server của thư viện chuẩn, mã
@@ -267,7 +315,9 @@ của giao diện tiếng Việt.
 Các flag của server: `--host` (mặc định là loopback; địa chỉ khác sẽ in cảnh báo, vì không có xác
 thực), `--port` (`0` = một cổng trống bất kỳ), `--no-browser` (dùng khi qua SSH hoặc trên máy không
 có desktop), `--max-sessions`, cùng các flag engine ở phần dưới. `GET /healthz` trả về
-`{"status": "ok", "version": ..., "ready": ...}`.
+`{"status": "ok", "version": ..., "ready": ...}`. Một bản demo công khai đặt sau proxy của dịch vụ
+hosting dùng `--public` cùng các giới hạn của nó ([chế độ công khai](docs/simulator.md#public-mode);
+có từ v0.2.0).
 
 ## Dùng CCA làm engine UCI
 
@@ -291,7 +341,7 @@ toán là `CCA_Nodes` cộng với đồng hồ. Mỗi nước đi kèm một b�
 | Scid vs. PC | Tools → Analysis Engines, thêm một engine; *Command*: đường dẫn đầy đủ của `cca-uci` (để trống *Parameters*), hoặc đường dẫn đầy đủ của `cca` với *Parameters* `uci`; giao thức UCI. Scid bỏ qua các tùy chọn `UCI_*`, nên hãy đặt `CCA_OpponentElo`. |
 | ChessBase / Fritz | Fritz 19: Engines → Create UCI Engine; ChessBase 18: Home → UCI Engine; duyệt tới `cca-uci.exe`. |
 | lichess-bot | `engine.name: cca-uci` (xem bên dưới). |
-| Docker | GUI chỉ khởi chạy một tệp thực thi: dùng một script bọc (wrapper) chạy `docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci` (tệp `.bat` cần `@echo off`; hãy pull image trước). Xem [gui-integration §11](docs/gui-integration.md#11-docker). |
+| Docker | GUI chỉ khởi chạy một tệp thực thi: dùng một script bọc (wrapper) chạy `docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci` (tệp `.bat` cần `@echo off`; hãy pull image trước). Xem [gui-integration §11](docs/gui-integration.md#11-docker). |
 
 Các bước trên lấy từ mã nguồn hoặc tài liệu của từng chương trình (Arena: từ hướng dẫn của bên thứ
 ba). CCA đã được kiểm thử qua python-chess 1.11.2, tầng engine của lichess-bot, với Stockfish 19
@@ -301,7 +351,7 @@ trên Windows; chưa chạy thử với GUI nào (kể cả việc ChessBase có
 `SyzygyPath` cùng `UCI_ShowWDL` khỏi `uci_options` mặc định: python-chess từ chối cấu hình những
 tùy chọn mà CCA không khai báo (`Move Overhead` thì được hỗ trợ). Ponder chỉ được bật/tắt bằng
 `engine.ponder`, không bao giờ qua `uci_options`; `bestmove` của CCA không kèm nước ponder, nên ở
-v0.1.0 thực tế không có gì ponder cả. Cấu hình đầy đủ:
+v0.2.0 thực tế không có gì ponder cả. Cấu hình đầy đủ:
 [gui-integration §10.2](docs/gui-integration.md#102-configure-the-engine).
 
 ```yaml
@@ -487,7 +537,7 @@ trường và giá trị: [tham chiếu §8](docs/reference.md#8-shipped-persona
   chứng thực nguồn gốc bản dựng:
 
   ```bash
-  gh attestation verify oci://ghcr.io/donquaan/cca:0.1.0 -R DonQuaan/CCA
+  gh attestation verify oci://ghcr.io/donquaan/cca:0.2.0 -R DonQuaan/CCA
   ```
 
 ## Tình trạng nghiên cứu và benchmark

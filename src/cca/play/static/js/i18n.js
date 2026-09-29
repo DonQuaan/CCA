@@ -88,6 +88,11 @@ export const STRINGS = {
     status_cca_move: "CCA to move.",
     status_thinking: "CCA is thinking...",
     status_waiting: "Sending your move...",
+    status_retrying: "CCA's move is waiting for the busy server; the page asks again shortly.",
+    status_no_game: "No game is open: \"New game\" starts one.",
+    status_no_game_retry: "No game is open yet: the page tries again by itself in {wait}.",
+    ask_text: "CCA's move did not arrive.",
+    ask_cca: "Ask CCA to move",
     status_warming: "Warming up the engines...",
     status_engine_error: "Engine unavailable: {error}",
     status_connecting: "Connecting to the CCA server...",
@@ -136,6 +141,17 @@ export const STRINGS = {
     err_promo_piece: "Name the promotion piece, for example {san} or {uci} (Q, R, B or N).",
     err_not_now: "You cannot move right now.",
     err_generic: "Error: {message}",
+    err_slow_down: "Slow down a little: this public demo allows a limited number of CCA moves per minute. Try again in {wait}.",
+    err_busy: "The CCA server is busy with other players' games. Try again in {wait}.",
+    err_at_once: "You already have requests waiting for CCA. Try again in {wait}, once they are done.",
+    err_connections: "Too many connections from your network to this public demo (other tabs or devices?). Try again in {wait}.",
+    err_game_busy: "This game is still busy with an earlier request (CCA is thinking, perhaps in another tab). Try again in {wait}.",
+    err_no_slot: "No free game slot: all games this public demo can hold are in use. Try again in {wait}.",
+    err_reads: "Slow down a little: this public demo limits how often a game's moves and CCA's reasons are downloaded. Try again in {wait}.",
+    err_retrying: "CCA cannot move yet: this public demo is busy or limits CCA moves per minute. The page asks again by itself in {wait}.",
+    wait_s: "{n} s",
+    wait_min: "{n} min",
+    wait_moment: "a moment",
     persona_cli: "The persona given on the command line.",
     about_title: "About CCA play",
     about_what: "CCA is a research layer on top of Stockfish 19 and a human move model (Maia-2, or an engine-derived QRE model when Maia-2 is not installed). It aims for human-like, hard-to-predict moves that target an opponent's likely mistakes, while keeping the objective risk within a budget.",
@@ -158,7 +174,7 @@ export const STRINGS = {
     g_latent_t: "Stress, drive, opponent stress, chaos",
     g_latent: "Virtual, latent control signals inspired by, not models of, physiology. Chaos u0-u2 come from the configured chaos driver (by default a deterministic Lorenz attractor; its AR(1) control condition when a config file selects it): a reproducible source of variability, not a model of temperament.",
     g_seed_t: "Seed",
-    g_seed: "Fixes CCA's own random draws. A game started without a seed gets a secret one, committed to (SHA-256) when the game starts and revealed when it ends. Replaying an untimed game on this server with the same seed, settings and moves repeats CCA's decisions when the engine search and the human model are deterministic (one engine thread; every decision starts from a cleared engine). Timed games also depend on the clock.",
+    g_seed: "Fixes CCA's own random draws. A game started without a seed gets a secret one, committed to (SHA-256) when the game starts and revealed when it ends. Replaying an untimed game on this server with the same seed, settings and moves repeats CCA's decisions when the engine search and the human model are deterministic (one engine thread; every decision starts from a cleared engine). Timed games also depend on the clock, and so does a decision that a public server's time cap cuts short.",
     g_think_t: "Think time",
     g_think: "Seconds a human-like player would spend (hand-set model, not fitted); shown as a delay only if you enable it.",
     about_docs: "Details and sources: docs/science.md, docs/architecture.md and docs/adr/0005-honest-science-labelling.md in the CCA source.",
@@ -276,6 +292,11 @@ export const STRINGS = {
     status_cca_move: "Đến lượt CCA.",
     status_thinking: "CCA đang suy nghĩ...",
     status_waiting: "Đang gửi nước đi...",
+    status_retrying: "Nước đi của CCA đang chờ máy chủ bận; trang sẽ tự hỏi lại ngay khi có thể.",
+    status_no_game: "Chưa có ván nào: bấm \"Ván mới\" để bắt đầu.",
+    status_no_game_retry: "Chưa có ván nào: trang sẽ tự thử lại sau {wait}.",
+    ask_text: "Nước đi của CCA chưa tới.",
+    ask_cca: "Mời CCA đi",
     status_warming: "Đang khởi động engine...",
     status_engine_error: "Engine không dùng được: {error}",
     status_connecting: "Đang kết nối tới máy chủ CCA...",
@@ -324,6 +345,17 @@ export const STRINGS = {
     err_promo_piece: "Hãy ghi rõ quân phong cấp, ví dụ {san} hoặc {uci} (Q, R, B hoặc N).",
     err_not_now: "Bây giờ bạn chưa đi được.",
     err_generic: "Lỗi: {message}",
+    err_slow_down: "Chậm lại một chút: bản demo công khai này giới hạn số nước đi của CCA mỗi phút. Thử lại sau {wait}.",
+    err_busy: "Máy chủ CCA đang bận với ván cờ của người chơi khác. Thử lại sau {wait}.",
+    err_at_once: "Bạn đang có yêu cầu chờ CCA xử lý. Thử lại sau {wait}, khi các yêu cầu đó đã xong.",
+    err_connections: "Có quá nhiều kết nối từ mạng của bạn tới bản demo công khai này (các thẻ hoặc thiết bị khác?). Thử lại sau {wait}.",
+    err_game_busy: "Ván này vẫn đang bận với một yêu cầu trước đó (CCA đang nghĩ, có thể ở một thẻ khác). Thử lại sau {wait}.",
+    err_no_slot: "Hết chỗ chơi: mọi ván mà bản demo công khai này chứa được đều đang được dùng. Thử lại sau {wait}.",
+    err_reads: "Chậm lại một chút: bản demo công khai này giới hạn số lần tải nước đi và lý do của CCA trong một ván. Thử lại sau {wait}.",
+    err_retrying: "CCA chưa đi được: bản demo công khai đang bận hoặc giới hạn số nước đi của CCA mỗi phút. Trang sẽ tự hỏi lại sau {wait}.",
+    wait_s: "{n} giây",
+    wait_min: "{n} phút",
+    wait_moment: "giây lát",
     persona_cli: "Phong cách truyền qua dòng lệnh.",
     about_title: "Giới thiệu CCA play",
     about_what: "CCA là một lớp nghiên cứu đặt trên Stockfish 19 và một mô hình nước đi của người (Maia-2, hoặc mô hình QRE suy từ engine khi chưa cài Maia-2). CCA hướng tới những nước đi giống người, khó đoán, nhắm vào các sai lầm dễ mắc của đối thủ, trong khi vẫn giữ rủi ro khách quan trong một ngân sách.",
@@ -346,7 +378,7 @@ export const STRINGS = {
     g_latent_t: "Căng thẳng, động lực, căng thẳng đối thủ, hỗn loạn",
     g_latent: "Các tín hiệu điều khiển ảo, tiềm ẩn, lấy cảm hứng từ sinh lý học chứ không mô hình hóa sinh lý. Hỗn loạn u0-u2 đến từ bộ tạo hỗn loạn được cấu hình (mặc định là một hấp tử Lorenz tất định; điều kiện đối chứng AR(1) khi tệp cấu hình chọn nó): một nguồn biến thiên tái lập được, không phải mô hình tính khí.",
     g_seed_t: "Hạt giống",
-    g_seed: "Cố định các lần rút ngẫu nhiên của chính CCA. Ván bắt đầu không có hạt giống sẽ nhận một hạt giống bí mật, được cam kết (SHA-256) khi ván bắt đầu và công bố khi ván kết thúc. Chơi lại một ván không tính giờ trên máy chủ này với cùng hạt giống, thiết lập và nước đi sẽ lặp lại các quyết định của CCA khi việc tìm kiếm của engine và mô hình người là tất định (engine một luồng; mỗi quyết định bắt đầu từ một engine đã được xóa trạng thái). Ván tính giờ còn phụ thuộc vào đồng hồ.",
+    g_seed: "Cố định các lần rút ngẫu nhiên của chính CCA. Ván bắt đầu không có hạt giống sẽ nhận một hạt giống bí mật, được cam kết (SHA-256) khi ván bắt đầu và công bố khi ván kết thúc. Chơi lại một ván không tính giờ trên máy chủ này với cùng hạt giống, thiết lập và nước đi sẽ lặp lại các quyết định của CCA khi việc tìm kiếm của engine và mô hình người là tất định (engine một luồng; mỗi quyết định bắt đầu từ một engine đã được xóa trạng thái). Ván tính giờ còn phụ thuộc vào đồng hồ, và quyết định bị giới hạn thời gian của máy chủ công khai cắt ngắn cũng vậy.",
     g_think_t: "Thời gian nghĩ",
     g_think: "Số giây một người chơi sẽ dùng (mô hình đặt tay, chưa khớp dữ liệu); chỉ hiện thành độ trễ khi bạn bật.",
     about_docs: "Chi tiết và nguồn: docs/science.md, docs/architecture.md và docs/adr/0005-honest-science-labelling.md trong mã nguồn CCA.",
@@ -404,6 +436,56 @@ export function t(key, params = {}) {
     text = text.split("{" + name + "}").join(String(value))
   }
   return text
+}
+
+// A wait in words: whole seconds below two minutes, else whole minutes (rounded up); "a
+// moment" when the server gave none.
+export function waitText(seconds) {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) return t("wait_moment")
+  const s = Math.max(1, Math.ceil(seconds))
+  return s < 120 ? t("wait_s", {n: s}) : t("wait_min", {n: Math.ceil(s / 60)})
+}
+
+// The sentence for each `limit` a public server names when it refuses a request it cannot
+// take now (server.py, app.py, limits.py). A Map: a name is never looked up on a prototype.
+const LIMIT_TEXT = new Map([
+  ["decisions_per_minute", "err_slow_down"],
+  ["reads_per_minute", "err_reads"],
+  ["requests_at_once", "err_at_once"],
+  ["max_queue", "err_busy"],
+  ["max_connections", "err_busy"],
+  ["max_connections_per_peer", "err_connections"],
+  ["max_sessions", "err_no_slot"],
+  ["game_busy", "err_game_busy"]
+])
+
+// A refusal by a public server's limits in words (with its Retry-After), or null for any other
+// error. A limit this page does not know is worded by its status (429, or a 503 that says
+// when to come back).
+export function limitText(err) {
+  if (!err) return null
+  let key = typeof err.limit === "string" ? LIMIT_TEXT.get(err.limit) : undefined
+  if (!key && err.status === 429) key = "err_slow_down"
+  if (!key && err.status === 503 && err.retryAfter != null) key = "err_busy"
+  return key ? t(key, {wait: waitText(err.retryAfter)}) : null
+}
+
+function messageOf(err) {
+  return err && err.message ? err.message : String(err)
+}
+
+// A failed request in words, for a toast. `retryIn`: seconds until CCA's refused move is asked
+// again by itself (flow.js), or null.
+export function errorText(err, retryIn = null) {
+  if (retryIn != null) return t("err_retrying", {wait: waitText(retryIn)})
+  if (err && err.status === 0) return t("status_offline")
+  return limitText(err) ?? t("err_generic", {message: messageOf(err)})
+}
+
+// A refused new game in words, for the new-game dialog: the server's own message (a bad FEN,
+// say) unless a public server's limits refused it.
+export function newGameErrorText(err) {
+  return limitText(err) ?? messageOf(err)
 }
 
 // Fill every element that declares data-i18n / data-i18n-title / -aria / -placeholder.

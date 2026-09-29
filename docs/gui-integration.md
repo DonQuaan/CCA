@@ -38,8 +38,8 @@ reports.
 
 ### 1.1 Install CCA
 
-Download `cca_chess-0.1.0-py3-none-any.whl` from the
-[v0.1.0 release](https://github.com/DonQuaan/CCA/releases/tag/v0.1.0). Install it into its own
+Download `cca_chess-0.2.0-py3-none-any.whl` from the
+[v0.2.0 release](https://github.com/DonQuaan/CCA/releases/tag/v0.2.0). Install it into its own
 virtual environment. CCA needs Python 3.11 or newer. `C:\cca\venv` and `~/cca/venv` below are
 example paths.
 
@@ -47,17 +47,17 @@ Windows (Command Prompt):
 
 ```bat
 python -m venv C:\cca\venv
-C:\cca\venv\Scripts\python -m pip install cca_chess-0.1.0-py3-none-any.whl
+C:\cca\venv\Scripts\python -m pip install cca_chess-0.2.0-py3-none-any.whl
 ```
 
 Linux and macOS:
 
 ```sh
 python3 -m venv ~/cca/venv
-~/cca/venv/bin/python -m pip install cca_chess-0.1.0-py3-none-any.whl
+~/cca/venv/bin/python -m pip install cca_chess-0.2.0-py3-none-any.whl
 ```
 
-With uv, `uv tool install ./cca_chess-0.1.0-py3-none-any.whl` installs the `cca` and `cca-uci`
+With uv, `uv tool install ./cca_chess-0.2.0-py3-none-any.whl` installs the `cca` and `cca-uci`
 executables into uv's tool folder instead ([section 2](#2-which-command-to-use) shows where that
 is). A source checkout set up with `uv sync` has both launchers in `.venv` (see the
 [README](../README.md)).
@@ -492,8 +492,8 @@ it.
 
 | Image | Contents |
 |---|---|
-| `ghcr.io/donquaan/cca:0.1.0` (also `latest`) | CCA, Stockfish 19 and the QRE human model |
-| `ghcr.io/donquaan/cca:0.1.0-maia2` (also `latest-maia2`) | The same, plus CPU-only torch and Maia-2. The Maia-2 weights are not in the image: they are downloaded on first use into `/data/maia2` and checked against a pinned SHA-256 |
+| `ghcr.io/donquaan/cca:0.2.0` (also `latest`) | CCA, Stockfish 19 and the QRE human model |
+| `ghcr.io/donquaan/cca:0.2.0-maia2` (also `latest-maia2`) | The same, plus CPU-only torch and Maia-2. The Maia-2 weights are not in the image: they are downloaded on first use into `/data/maia2` and checked against a pinned SHA-256 |
 
 - Both images are built for **linux/amd64 only**.
 - The images set `CCA_STOCKFISH=/usr/local/bin/stockfish`. Stockfish's licence and source are
@@ -508,9 +508,9 @@ it.
 Pull the image first, and check where it came from (needs the GitHub CLI):
 
 ```sh
-docker pull ghcr.io/donquaan/cca:0.1.0
-gh attestation verify oci://ghcr.io/donquaan/cca:0.1.0 -R DonQuaan/CCA
-printf 'uci\nisready\nquit\n' | docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci
+docker pull ghcr.io/donquaan/cca:0.2.0
+gh attestation verify oci://ghcr.io/donquaan/cca:0.2.0 -R DonQuaan/CCA
+printf 'uci\nisready\nquit\n' | docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci
 ```
 
 These flags matter when a GUI starts the container
@@ -537,7 +537,7 @@ Windows, `cca-docker.bat`:
 
 ```bat
 @echo off
-docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci
+docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci
 ```
 
 `@echo off` is required. Without it, `cmd` echoes the command line to stdout before the engine
@@ -547,7 +547,7 @@ Linux/macOS, `cca-docker.sh` (then run `chmod +x cca-docker.sh`):
 
 ```sh
 #!/bin/sh
-exec docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci
+exec docker run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci
 ```
 
 A GUI may start with a different `PATH` than your terminal. If the engine does not start,
@@ -558,7 +558,7 @@ replace `docker` with the absolute path that `command -v docker` prints (on Wind
 `-maia2` tag:
 
 ```sh
-exec docker run -i --rm --pull=never --no-healthcheck -v cca-data:/data ghcr.io/donquaan/cca:0.1.0-maia2 uci
+exec docker run -i --rm --pull=never --no-healthcheck -v cca-data:/data ghcr.io/donquaan/cca:0.2.0-maia2 uci
 ```
 
 Do the first download in a terminal rather than during a GUI handshake. `isready` loads Maia-2,
@@ -566,7 +566,7 @@ which fetches the checkpoint into the volume (the rapid checkpoint is 279,704,57
 267 MiB or 280 MB):
 
 ```sh
-printf 'uci\nisready\nquit\n' | docker run -i --rm --pull=never --no-healthcheck -v cca-data:/data ghcr.io/donquaan/cca:0.1.0-maia2 uci
+printf 'uci\nisready\nquit\n' | docker run -i --rm --pull=never --no-healthcheck -v cca-data:/data ghcr.io/donquaan/cca:0.2.0-maia2 uci
 ```
 
 On Windows (Command Prompt), `(echo uci& echo isready& echo quit) | docker run ...` does the
@@ -581,13 +581,13 @@ None of these were run with Docker.
 | lichess-bot | `dir`: the wrapper's folder; `name`: `cca-docker.bat` or `cca-docker.sh`. On Linux/macOS the file must be executable. The `--key=value` arguments lichess-bot appends are dropped by the wrapper |
 | cutechess-cli, Cute Chess GUI | `cmd=` or **Command**: the wrapper. On Windows, a `.bat` started this way worked through python-chess in earlier tests, but was not tried in Cute Chess (**UNVERIFIED**) |
 | Arena | The `.bat`. Third-party logs show Arena starting `.bat` engines (**UNVERIFIED**) |
-| Scid vs. PC | Either the wrapper, or **Command** `docker` with **Parameters** `run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.1.0 uci` |
+| Scid vs. PC | Either the wrapper, or **Command** `docker` with **Parameters** `run -i --rm --pull=never --no-healthcheck ghcr.io/donquaan/cca:0.2.0 uci` |
 | En Croissant | Linux/macOS: the `.sh`. Windows: not possible, because the file picker accepts only `.exe` |
 | BanksiaGUI | **UNVERIFIED** |
 | ChessBase/Fritz | Not usable: third-party reports say `.bat` engines are not accepted |
 
 If a GUI kills the engine abruptly, the `docker` client may exit while the container keeps
-running (**UNVERIFIED**). To check, run `docker ps --filter ancestor=ghcr.io/donquaan/cca:0.1.0`,
+running (**UNVERIFIED**). To check, run `docker ps --filter ancestor=ghcr.io/donquaan/cca:0.2.0`,
 and stop any leftover container with `docker stop <id>`.
 
 ## 12. The browser board instead of a GUI
@@ -598,8 +598,8 @@ and all arguments are in [reference: `cca play`](reference.md#cca-play). From th
 default command does the same on port 8765:
 
 ```sh
-docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/donquaan/cca:0.1.0
-docker run --rm -p 127.0.0.1:8765:8765 -v cca-data:/data ghcr.io/donquaan/cca:0.1.0-maia2
+docker run --rm -p 127.0.0.1:8765:8765 ghcr.io/donquaan/cca:0.2.0
+docker run --rm -p 127.0.0.1:8765:8765 -v cca-data:/data ghcr.io/donquaan/cca:0.2.0-maia2
 ```
 
 Then open `http://127.0.0.1:8765`. Mapping the port to `127.0.0.1` keeps the simulator off

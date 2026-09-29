@@ -2,12 +2,12 @@
 // The server is authoritative for the game; this module renders its state and sends moves.
 
 import {api} from "./api.js"
-import {t, setLanguage, language, detectLanguage, applyStatic} from "./i18n.js"
+import {t, setLanguage, language, detectLanguage, applyStatic, errorText, newGameErrorText, waitText} from "./i18n.js"
 import {BoardView} from "./board.js"
 import {renderCandidates, renderKnobs, renderLatent, whySentence, insightBadge, boardArrows, showInsightParts, trapMarked} from "./insight.js"
 import {renderSeries} from "./charts.js"
 import {remainingMs} from "./clock.js"
-import {createFlow, canMove} from "./flow.js"
+import {createFlow, canMove, canAsk} from "./flow.js"
 
 const $ = (id) => document.getElementById(id)
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -31,7 +31,9 @@ const ui = {
   decisions: new Map(),  // ply -> decision JSON
   busy: false,           // a move or take-back request is in flight
   thinking: false,       // CCA is deciding (or its emulated think time runs)
+  retrying: false,       // CCA's move was refused by a public server's limits: asked again soon
   starting: false,       // a new-game request is in flight
+  noGame: null,          // {err, retryIn}: why the first game was refused (none shown yet)
   reveal: null,          // {until, total} while an emulated think time runs
   review: null,          // null = live; -1 = start position; k = position after ply k
   insight: true,
@@ -57,6 +59,7 @@ const flow = createFlow({
     updateInput,
     renderPlayers,
     showError,
+    noGame,
     displayedFen,
     remember: (gameId) => tabStore.set("game", gameId),
     setOrientation: (color) => board.setOrientation(color),
@@ -82,9 +85,29 @@ function toast(text, isError = false) {
   ui.toastTimer = setTimeout(() => { box.hidden = true }, isError ? 7000 : 2500)
 }
 
-function showError(err) {
-  if (err && err.status === 0) toast(t("status_offline"), true)
-  else toast(t("err_generic", {message: err && err.message ? err.message : String(err)}), true)
+// `retryIn`: seconds until flow.js asks for CCA's refused move again by itself (or null).
+// The words (a public server's limits included) come from i18n.js.
+function showError(err, retryIn = null) {
+  toast(errorText(err, retryIn), true)
+}
+
+// The first game was refused (flow.firstGame): with no game there is no status to render, so
+// the status line says why, and what comes next, until a game starts (renderStatus).
+function noGame(err, retryIn) {
+  showError(err)
+  ui.noGame = {err, retryIn}
+  renderNoGame()
+}
+
+// The status line while there is no game (see noGame); a language change words it again.
+function renderNoGame() {
+  if (ui.state || !ui.noGame) return
+  const {err, retryIn} = ui.noGame
+  const status = $("status")
+  status.textContent = errorText(err) + " " + (retryIn == null
+    ? t("status_no_game")
+    : t("status_no_game_retry", {wait: waitText(retryIn)}))
+  status.className = "status error"
 }
 
 function setOverlay(text) {
@@ -244,6 +267,7 @@ function renderStatus() {
   let text
   if (s.game_over) text = overText(s)
   else if (ui.thinking) text = t("status_thinking")
+  else if (ui.retrying) text = t("status_retrying")
   else if (ui.busy || ui.starting) text = t("status_waiting")
   else if (s.to_move === "human") text = t("status_your_move", {color: t(s.human_color + "_l")})
   else text = t("status_cca_move")
@@ -337,6 +361,12 @@ function renderControls() {
   $("nav-prev").disabled = at <= -1
   $("nav-next").disabled = ui.review === null
   $("nav-last").disabled = ui.review === null
+  // CCA's move failed and nothing asks for it again. The banner appears without moving the
+  // focus, so the polite live region says so once, when it appears (WCAG 4.1.3).
+  const ask = $("ask-banner")
+  const asking = canAsk(ui)
+  if (asking && ask.hidden) announce(`${t("ask_text")} ${t("ask_cca")}.`)
+  ask.hidden = !asking
   const entry = canMove(ui)
   $("kbd-move").disabled = !entry
   $("kbd-form").querySelector("button").disabled = !entry
@@ -551,7 +581,7 @@ async function submitNewGame(event) {
     await flow.newGame(body)
     $("new-dialog").close()
   } catch (err) {
-    $("new-error").textContent = err && err.message ? err.message : String(err)
+    $("new-error").textContent = newGameErrorText(err)
   }
 }
 
@@ -590,6 +620,7 @@ function applyLanguage() {
   renderModelNote()
   renderAbout()
   render()
+  renderNoGame()
 }
 
 function wire() {
@@ -615,6 +646,7 @@ function wire() {
   $("persona-select").addEventListener("change", updatePersonaDesc)
   for (const id of ["elo-self", "elo-oppo"]) $(id).addEventListener("input", () => { $(id + "-out").textContent = $(id).value })
   $("undo-btn").addEventListener("click", flow.undo)
+  $("ask-btn").addEventListener("click", () => flow.maybeThink())
   $("resign-btn").addEventListener("click", resign)
   $("flip-btn").addEventListener("click", () => {
     board.setOrientation(other(board.orientation))
@@ -678,11 +710,7 @@ async function boot() {
       // unknown or evicted game: start a fresh one
     }
   }
-  try {
-    await flow.newGame({})
-  } catch (err) {
-    showError(err)
-  }
+  await flow.firstGame()
 }
 
 boot()

@@ -1,0 +1,187 @@
+name: Deploy Space
+
+# Public demo: the Hugging Face Space named by the variable HF_SPACE runs a released image,
+# ghcr.io/donquaan/cca:<version> pinned by digest (docs/deploy.md). This workflow builds nothing:
+# it renders deploy/huggingface/{Dockerfile,README.md} as the version's tag holds them, pushes
+# those two files to the Space's git repository with the secret HF_TOKEN, and waits until the
+# Space runs the pushed commit and serves the version. The Space must exist (Docker SDK) and be
+# public before the first run.
+#
+# - workflow_dispatch: deploy any released version (default: the latest release); also rollback.
+# - release published: a release published by a person or another token. release.yml publishes
+#   with GITHUB_TOKEN, and events caused by GITHUB_TOKEN start no workflow run
+#   (https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow),
+#   so an automated release needs a manual run, or a job in release.yml that calls this file
+#   (workflow_call, `secrets: inherit`). Pre-releases are never deployed by the release event.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy, e.g. 0.1.1 or v0.1.1 ("latest": the latest release)'
+        type: string
+        required: true
+        default: latest
+      templates:
+        description: Space files from the version's tag (release) or from this run's branch (checkout)
+        type: choice
+        options: [release, checkout]
+        default: release
+  workflow_call:
+    inputs:
+      version:
+        description: Version to deploy, e.g. 0.1.1 or v0.1.1
+        type: string
+        required: true
+      templates:
+        description: Space files from the version's tag (release) or from the calling ref (checkout)
+        type: string
+        required: false
+        default: release
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # -e and -o pipefail
+
+# Every ${{ }} value reaches a script through env, never pasted into the script's text. The token
+# is in the environment of the push step only; the settings check sees just whether it is set.
+jobs:
+  deploy:
+    name: deploy to the Hugging Face Space
+    if: ${{ github.event_name != 'release' || !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # HF_TOKEN belongs in this environment's secrets: its deployment rules (main and v* tags, an
+    # optional reviewer) then decide which runs may use it (docs/deploy.md).
+    environment: huggingface-space
+    # One deploy at a time: a newer one waits, it never cancels a push in flight.
+    concurrency:
+      group: deploy-space
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # nothing here pushes to GitHub
+          fetch-tags: true # the Space files come from the deployed version's tag
+      - name: Check the deploy settings (secret HF_TOKEN, variables HF_SPACE and HF_USERNAME)
+        env:
+          HF_SPACE: ${{ vars.HF_SPACE }}
+          HF_USERNAME: ${{ vars.HF_USERNAME }}
+          HF_TOKEN_PRESENT: ${{ secrets.HF_TOKEN != '' }}
+        run: >-
+          python3 deploy/huggingface/space.py check-config --space "$HF_SPACE"
+          --username "$HF_USERNAME" --token-present "$HF_TOKEN_PRESENT"
+      # The helper writes its errors to stderr: x=$(...) keeps only stdout, the log shows both.
+      - name: Version to deploy
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
+        run: |
+          if [ "$REQUESTED" = latest ]; then
+            REQUESTED=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          fi
+          version=$(python3 deploy/huggingface/space.py version "$REQUESTED")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Deploying CCA $version"
+      - name: Image digest (anonymous pull from ghcr.io)
+        id: digest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          digest=$(python3 deploy/huggingface/space.py digest "$VERSION")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "ghcr.io/donquaan/cca:$VERSION@$digest"
+      # cca play --public answers only the host names it is given (and IP literals); the Space's
+      # own name comes from the Hub API, so the Space must exist and be public by now.
+      - name: Space host name (Hub API)
+        id: space
+        env:
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          host=$(python3 deploy/huggingface/space.py host "$HF_SPACE")
+          echo "host=$host" >> "$GITHUB_OUTPUT"
+          echo "https://$host"
+      # The templates of the version's own tag, v<version>: their CMD is the command line that
+      # version's image understands, so a rollback deploys what the release shipped. "checkout"
+      # takes them from the ref this run checked out instead (a fix to the Space files alone).
+      - name: Render the Space files
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+          HOST_NAME: ${{ steps.space.outputs.host }}
+          TEMPLATES: ${{ inputs.templates }}
+        run: |
+          templates="$RUNNER_TEMP/space-templates"
+          mkdir -p "$templates"
+          case "${TEMPLATES:-release}" in
+            release)
+              for name in Dockerfile README.md; do
+                if ! git show "refs/tags/v${VERSION}:deploy/huggingface/${name}" > "$templates/${name}"; then
+                  echo "::error title=deploy-space::the tag v${VERSION} has no deploy/huggingface/${name}: a version released before the Space deploy cannot run it" >&2
+                  exit 1
+                fi
+              done
+              echo "Space files from the tag v$VERSION" ;;
+            checkout)
+              cp deploy/huggingface/Dockerfile deploy/huggingface/README.md "$templates/"
+              echo "Space files from $GITHUB_SHA (templates: checkout)" ;;
+            *)
+              echo "::error title=deploy-space::templates must be release or checkout" >&2
+              exit 1 ;;
+          esac
+          python3 deploy/huggingface/space.py render --source "$templates" "$VERSION" "$DIGEST" "$HOST_NAME" "$RUNNER_TEMP/space-files"
+          {
+            echo "### Space Dockerfile for CCA $VERSION"
+            echo '```dockerfile'
+            cat "$RUNNER_TEMP/space-files/Dockerfile"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Push the files to the Space
+        id: push
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+          HF_USERNAME: ${{ vars.HF_USERNAME }}
+          VERSION: ${{ steps.version.outputs.version }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+          GIT_TERMINAL_PROMPT: "0"
+          GIT_LFS_SKIP_SMUDGE: "1"
+        run: |
+          # git gets the password from this helper, which reads HF_TOKEN from its own environment:
+          # the token is never on a command line, in a URL, in .git/config or in the log.
+          export GIT_USER="${HF_USERNAME:-${HF_SPACE%%/*}}"
+          helper='!f() { test "$1" = get || return 0; echo "username=${GIT_USER}"; echo "password=${HF_TOKEN}"; }; f'
+          git() { command git -c credential.helper= -c "credential.helper=$helper" "$@"; }
+          repo="$RUNNER_TEMP/space-repo"
+          git clone --depth 1 "https://huggingface.co/spaces/${HF_SPACE}" "$repo"
+          # The Space holds exactly the rendered files, plus the .gitattributes the Hub may add.
+          find "$repo" -mindepth 1 -maxdepth 1 ! -name .git ! -name .gitattributes -exec rm -rf {} +
+          cp "$RUNNER_TEMP/space-files/Dockerfile" "$RUNNER_TEMP/space-files/README.md" "$repo/"
+          cd "$repo"
+          git add --all
+          if git diff --cached --quiet; then
+            echo "The Space already has these files: nothing to push."
+          else
+            git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit --quiet -m "Deploy CCA ${VERSION}" \
+              -m "Image ghcr.io/donquaan/cca:${VERSION}@${DIGEST}, rendered by ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} from ${GITHUB_SHA}."
+            git push origin HEAD:main
+          fi
+          # The commit the Space must end up running: the one just pushed, or the unchanged HEAD.
+          commit=$(git rev-parse HEAD)
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "The Space's commit: $commit"
+      - name: Wait until the Space runs that commit and serves the version (up to 15 minutes)
+        env:
+          HF_SPACE: ${{ vars.HF_SPACE }}
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT: ${{ steps.push.outputs.commit }}
+        run: |
+          python3 deploy/huggingface/space.py wait "$HF_SPACE" "$VERSION" --commit "$COMMIT" --timeout 900 --interval 15
+          echo "Deployed CCA $VERSION to https://huggingface.co/spaces/$HF_SPACE" >> "$GITHUB_STEP_SUMMARY"

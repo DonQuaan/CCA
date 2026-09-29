@@ -53,3 +53,4 @@ CLAUDE.md
 .claude/
 .pre-commit-cache/
 .cache/
+.serena/

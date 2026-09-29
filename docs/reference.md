@@ -24,7 +24,7 @@ Read from `pyproject.toml`; the version from the imported package.
 | Item | Value |
 |---|---|
 | Distribution | `cca-chess` |
-| Version (`cca.__version__`) | `0.1.0` |
+| Version (`cca.__version__`) | `0.2.0` |
 | Python | `>=3.11` |
 | Licence | `Apache-2.0` |
 | Build backend | `hatchling.build` |
@@ -198,23 +198,36 @@ play against CCA in the browser and watch its decision signals
 
 | Argument | Type | Default | Choices | Help |
 |---|---|---|---|---|
+| `--allowed-host` | str via _checked(kind='host') | `None` |  | public host name answered besides IP addresses and localhost, e.g. owner-space.hf.space (repeatable) |
 | `--argmax` | flag (StoreTrue) | `False` |  | deterministic argmax instead of sampling |
 | `--config` | Path | `None` |  | full agent config .toml |
+| `--decisions-per-minute` | int via _bounded_int(lo=1, hi=600) | `None` |  | CCA decisions (moves and position-lab analyses) per client and minute; more get 429 [public: 20] |
 | `--device` | str | `'gpu'` | `'gpu'`, `'cpu'` |  |
 | `--elo-oppo` | int | `1500` |  |  |
 | `--elo-self` | int | `1900` |  |  |
+| `--frame-ancestor` | str via _checked(kind='origin') | `None` |  | https origin allowed to show the page in a frame, e.g. https://huggingface.co (repeatable; default: no framing) |
 | `--hash` | int | `256` |  | Stockfish hash MB |
 | `--host` | str | `'127.0.0.1'` |  | address to bind (default: loopback) |
 | `--human` | str | `'maia2'` | `'maia2'`, `'qre'` |  |
+| `--log-forwarded-hops` | flag (StoreTrue) | `False` |  | with --public: add to each request-log line the NUMBER of X-Forwarded-For entries (xff=N; never an address), to calibrate --trusted-proxies after a deploy behind a platform that does not document its proxies: use the smallest N seen on the page's own requests |
 | `--maia2-type` | str | `'rapid'` | `'rapid'`, `'blitz'` |  |
+| `--max-connections` | int via _bounded_int(lo=1, hi=1024) | `None` |  | connections handled at once, one thread each; more get 503 (busy). Also caps API requests in progress per client (8) and requests waiting for a busy game (2), and gives request heads 10 s [public: 64] |
+| `--max-connections-per-peer` | int via _bounded_int(lo=1, hi=1024) | `None` |  | with --trusted-proxies 0 on a server that clients reach directly (no proxy in front): connections one address (an IPv6 /64) may have open at once, whatever they are doing; more get 503. Needs --max-connections or --public. Never behind a proxy, even an untrusted one (every connection then has the proxy's address): there the platform's edge is expected to buffer requests [public: off] |
+| `--max-queue` | int via _bounded_int(lo=0, hi=1024) | `None` |  | requests that may wait for the engine; more get 503 (busy) [public: 6] |
 | `--max-sessions` | int via _bounded_int(lo=1, hi=1024) | `16` |  | games kept in memory (least recently used ones are dropped) |
+| `--max-sessions-per-client` | int via _bounded_int(lo=1, hi=1024) | `None` |  | games one client keeps; a new one replaces its least recently used [public: 3] |
+| `--max-think-seconds` | float via _bounded_float(lo=1.0, hi=3600.0) | `None` |  | wall-clock cap of each CCA decision (moves and position-lab analyses) once it has the engine: the search is shortened to meet it (not reproducible then) [public: 20] |
 | `--no-browser` | flag (StoreTrue) | `False` |  | do not open a web browser |
 | `--nodes` | int | `200000` |  | Stockfish nodes per evaluation |
 | `--persona` | str | `None` |  | shipped persona name or persona .toml path |
 | `--port` | int via _bounded_int(lo=0, hi=65535) | `8765` |  | TCP port (0 = any free port) |
+| `--public` | flag (StoreTrue) | `False` |  | public demo mode (e.g. on Hugging Face Spaces): needs a non-loopback --host and --allowed-host; turns the limits below on with the defaults in brackets and logs one line per request (no addresses) |
+| `--reads-per-minute` | int via _bounded_int(lo=1, hi=6000) | `None` |  | reads of a game's decisions or PGN per client and minute; more get 429 [public: 60] |
 | `--seed` | str | `'cca'` |  |  |
+| `--session-idle-minutes` | int via _bounded_int(lo=1, hi=10080) | `None` |  | games unused this long are dropped [public: 30] |
 | `--stockfish` | str | `None` |  | path to Stockfish (default: auto-detect) |
 | `--threads` | int | `1` |  | Stockfish threads (1 = reproducible) |
+| `--trusted-proxies` | int via _bounded_int(lo=0, hi=8) | `0` |  | reverse proxies in front: the client is the X-Forwarded-For entry N hops from the right (0: the header is ignored; 1 on Hugging Face Spaces; --log-forwarded-hops counts them on other platforms) |
 
 Games started without a seed get a fresh secret seed (SHA-256 commitment shown during the game, seed revealed at the end); --seed seeds the position lab.
 
@@ -238,7 +251,7 @@ come from `cca.uci.protocol.UCI_OPTION_HELP` when the module defines it.
 
 | Identifier | Value |
 |---|---|
-| `name` | `CCA 0.1.0` |
+| `name` | `CCA 0.2.0` |
 | `author` | `Nguyen Vu Dong Quan (DonQuaan)` |
 
 | Option | Type | Default | Min | Max | Values | Description |
@@ -612,6 +625,7 @@ Everything fixed at start-up (from the command line).
 | `threads` | `int` | `1` |  |
 | `hash_mb` | `int` | `256` |  |
 | `max_sessions` | `int` | `16` |  |
+| `limits` | `Limits` | `Limits()` | Per-client and queue limits (all off by default; on with ``--public``). |
 
 ### `TimeControl`
 
@@ -623,6 +637,38 @@ Base time and Fischer increment, in seconds.
 |---|---|---|---|
 | `base_s` | `float` | *required* |  |
 | `inc_s` | `float` | *required* |  |
+
+### `Limits`
+
+`cca.play.limits.Limits`.
+
+Request limits of ``cca play`` (``None`` = no limit, the local default).
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `public` | `bool` | `False` | Public mode (``--public``): the limits below default on and each request is logged. |
+| `max_sessions_per_client` | `int \| None` | `None` | Games one client keeps; a new game replaces its least recently used one. |
+| `decisions_per_minute` | `int \| None` | `None` | CCA decisions (``/think`` and ``/api/analyse``) per client and minute (token bucket). |
+| `max_queue` | `int \| None` | `None` | Requests that may wait for the engine while it works; one more gets 503 (busy). |
+| `session_idle_minutes` | `int \| None` | `None` | A game nobody touched for this long is dropped. |
+| `max_connections` | `int \| None` | `None` | Connections handled at once (one thread each); one more gets 503 at once. Also bounds per client (API requests in progress) and per game (requests waiting for it). |
+| `max_think_seconds` | `float \| None` | `None` | Wall-clock cap of one CCA decision, once it has the engine: the agent gets a deadline that many seconds ahead (the earlier of it and a timed game's own clock deadline) and shortens its search to meet it, down to reflex mode (the engine's best move). |
+| `reads_per_minute` | `int \| None` | `None` | Reads of a game's decisions or PGN (the responses that grow with the game) per client and minute (token bucket). |
+| `max_connections_per_peer` | `int \| None` | `None` | With ``max_connections`` and no trusted proxy: connections one TCP peer (an IPv6 /64 as one) may have open at once, whatever they are doing; one more gets 503 at once. Off unless asked for, even in public mode: behind a proxy (also one not trusted, ``trusted_proxies`` 0) every connection comes from the proxy, and this would cap the whole site. |
+
+### `ServerOptions`
+
+`cca.play.server.ServerOptions`.
+
+How the HTTP layer faces the network (the defaults are the local, loopback behaviour).
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `public` | `bool` | `False` | Public mode: a start-up notice instead of the exposure warning, and a request log. |
+| `trusted_proxies` | `int` | `0` | Reverse proxies in front; the client is that many hops from the right of ``X-Forwarded-For`` (0: the header is ignored and the TCP peer is the client). |
+| `frame_ancestors` | `tuple[str, ...]` | `()` | Exact ``https://host[:port]`` origins allowed to frame the page (none: ``DENY``). |
+| `allowed_hosts` | `tuple[str, ...]` | `()` | Extra ``Host`` names answered (the public name(s) behind a proxy), lower case. |
+| `log_forwarded_hops` | `bool` | `False` | Public mode: each request-log line also gives how many ``X-Forwarded-For`` entries the request carried (``xff=N``: a number, never an address), to calibrate ``trusted_proxies`` behind a platform that does not document its proxy chain. |
 
 ### `ReplyStats`
 
@@ -953,8 +999,12 @@ is shown). Values computed from other names or from calls are not listed.
 | `cca.play.app` | `MAX_SEED_LENGTH` | `64` |  |
 | `cca.play.app` | `TIME_CONTROLS` | `(None, (180, 2), (300, 3), (600, 5), (900, 10))` |  |
 | `cca.play.game` | `REVEAL_GRACE_S` | `0.05` |  |
+| `cca.play.limits` | `MAX_TRACKED_CLIENTS` | `4096` |  |
+| `cca.play.limits` | `_PRUNE_TO` | `0.75` |  |
+| `cca.play.limits` | `_EPS` | `1e-09` |  |
 | `cca.play.server` | `MAX_BODY` | `65536` | `64 * 1024` |
 | `cca.play.server` | `_MAX_DRAIN` | `1048576` | `1024 * 1024` |
+| `cca.play.server` | `_MAX_HOST_NAME` | `253` |  |
 | `cca.policy.pikl` | `_ARGMAX_LAMBDA` | `1e-12` |  |
 | `cca.uci.protocol` | `_MIN_BUDGET` | `0.01` |  |
 

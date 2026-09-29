@@ -25,7 +25,7 @@ import chess.pgn
 
 from cca import __version__
 from cca.core.types import Clock
-from cca.play.serialize import decision_to_json
+from cca.play.serialize import decision_to_json, dumps
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -43,13 +43,29 @@ REVEAL_GRACE_S = 0.05
 
 
 class ApiError(Exception):
-    """A client-visible error with an HTTP status (reported as JSON)."""
+    """A client-visible error with an HTTP status (reported as JSON).
 
-    def __init__(self, status: int, message: str, state: dict[str, object] | None = None) -> None:
+    ``retry_after`` (whole seconds) becomes a ``Retry-After`` header and ``limit`` a ``limit``
+    field of the JSON error (which limit refused, so a page can explain it): both are set by
+    the limits of a public deployment (429 too fast or too many at once, 503 busy or full, 409
+    game busy), never by the local default.
+    """
+
+    def __init__(
+        self,
+        status: int,
+        message: str,
+        state: dict[str, object] | None = None,
+        *,
+        retry_after: int | None = None,
+        limit: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.message = message
         self.state = state
+        self.retry_after = retry_after
+        self.limit = limit
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +146,13 @@ class GameSession:
         self.result: str | None = None
         self.reason: str | None = None
         self.history: list[dict[str, object]] = []
-        self.decisions: dict[int, dict[str, object]] = {}
+        self.decisions: dict[int, bytes] = {}
+        """CCA's decisions by ply, as the JSON the API sends (serialised once, when made:
+        reading them costs no serialisation, and bytes take far less memory than objects)."""
+        self.reached = 0
+        """The most moves played in this game so far (a take-back does not lower it)."""
+        # Moves on the board before the human's first one (0: the human moves first).
+        self._before_human = 0 if board.turn == human_color else 1
         self.started = dt.datetime.now(dt.UTC)
         self._now = now
         self._run_from = now()
@@ -150,6 +172,11 @@ class GameSession:
     def over(self) -> bool:
         """Whether the game has a result."""
         return self.result is not None
+
+    @property
+    def human_moved(self) -> bool:
+        """Whether the board holds a move of the human's (a take-back can remove it again)."""
+        return len(self.board.move_stack) > self._before_human
 
     @property
     def seed(self) -> str:
@@ -214,11 +241,22 @@ class GameSession:
         if end is not None:
             self._finish(*end)
 
-    def human_move(self, uci: object) -> None:
+    def _advance(self) -> bool:
+        """After a move: whether the game has more moves than ever before (see ``reached``)."""
+        played = len(self.board.move_stack)
+        if played <= self.reached:
+            return False
+        self.reached = played
+        return True
+
+    def human_move(self, uci: object) -> bool:
         """Play the human's move (400 if illegal or not their turn, 409 if the game is over).
 
         In a timed game, a move sent while CCA's move is still being revealed (the emulated
         thinking delay) is refused with 409 as well; see :data:`REVEAL_GRACE_S`.
+
+        Returns whether the game now has more moves than ever before: ``False`` for a move
+        played again after a take-back.
         """
         self.refresh()
         if self.over:
@@ -234,9 +272,21 @@ class GameSession:
         self._charge(self.human_color, max(0.0, now - self._run_from), now)
         self.board.push(move)
         self._check_board_end()
+        return self._advance()
 
-    def cca_move(self, engine_lock: AbstractContextManager[object]) -> dict[str, object]:
-        """Let CCA decide and play for the side to move (409 if it is the human's turn)."""
+    def cca_move(
+        self,
+        engine_lock: AbstractContextManager[object],
+        *,
+        max_think_s: float | None = None,
+        stop: threading.Event | None = None,
+    ) -> dict[str, object]:
+        """Let CCA decide and play for the side to move (409 if it is the human's turn).
+
+        ``max_think_s`` caps the decision's wall time once the engine is ours: the agent gets
+        the earlier of that deadline and the clock's own (timed games). ``stop`` ends a running
+        decision early (the server is shutting down). ``None``: no cap, no stop (local).
+        """
         self.refresh()
         if self.over:
             raise ApiError(409, "the game is over", self.state())
@@ -255,13 +305,16 @@ class GameSession:
             deadline = (
                 self.agent.deadline_for(self.board, clock) if clock.my_time is not None else None
             )
+            if max_think_s is not None:  # the public cap: whichever deadline comes first
+                cap = time.monotonic() + max_think_s
+                deadline = cap if deadline is None else min(deadline, cap)
             # The engine process is shared with the other games and the lab: start each
             # decision from a cleared engine (ucinewgame) so that a replay of this game with
             # the same seed does not depend on what else the engine searched in between.
             self.agent.engine.new_game()
             known_game = self.agent.game_id
             started = time.monotonic()
-            decision = self.agent.choose(self.board.copy(), clock, deadline=deadline)
+            decision = self.agent.choose(self.board.copy(), clock, deadline=deadline, stop=stop)
             compute = time.monotonic() - started
             # The agent starts a new game (its latent state restarts) when the position does
             # not continue the one it knows, e.g. after a take-back of its own move.
@@ -279,6 +332,7 @@ class GameSession:
         move_number = self.board.fullmove_number  # as in the move list, for a FEN start too
         self._charge(self.cca_color, charge, clock_start + charge)
         self.board.push(move)
+        self._advance()
         state = decision.state
         self.history.append(
             {
@@ -300,7 +354,7 @@ class GameSession:
                 "restart": restarted,
             }
         )
-        self.decisions[ply] = payload
+        self.decisions[ply] = dumps(payload)
         self._check_board_end()
         reveal = max(0.0, clock_start + charge - self._now())
         return {
@@ -428,6 +482,18 @@ class GameSession:
             "can_undo": self.can_undo(),
             "history": self.history,
         }
+
+    def decisions_body(self) -> bytes:
+        """``{"decisions": [{"ply": ..., "decision": ...}, ...]}`` by ply, as JSON bytes.
+
+        Joined from the decisions serialised when they were made: the same bytes as
+        serialising the whole list at once, without its cost (which grows with the game).
+        """
+        items = [
+            b'{"ply":%d,"decision":%s}' % (ply, blob)
+            for ply, blob in sorted(self.decisions.items())
+        ]
+        return b'{"decisions":[' + b",".join(items) + b"]}"
 
     def pgn(self) -> str:
         """PGN with sensible headers; CCA's per-move diagnostics are added once the game ended."""
